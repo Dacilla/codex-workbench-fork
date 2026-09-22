@@ -11,6 +11,7 @@
  */
 
 import * as vscode from "vscode";
+import { randomBytes } from "node:crypto";
 import { backendSpawnArgs, discoverBackend } from "./backend/BackendDiscovery";
 import type { HandshakeResult } from "./backend/ProtocolVersion";
 import { diffCandidateFor } from "./ide/DiffProvider";
@@ -62,7 +63,8 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     {
       onApprovalRequested: (approval) => {
-        log(`approval requested: ${approval.method} ${approval.summary}`);
+        // Log routing metadata only: summaries may echo tool output.
+        log(`approval requested: ${approval.method} thread=${approval.threadId} request=${String(approval.requestId)}`);
         const owner = findPanelForThread(approval.threadId);
         if (owner !== null) {
           void owner.panel.webview.postMessage({ type: "ext/approval", requestId: approval.requestId, method: approval.method, summary: approval.summary });
@@ -194,9 +196,12 @@ function broadcast(message: unknown): void {
   }
 }
 
-async function createChatPanel(column: vscode.ViewColumn = vscode.ViewColumn.Active): Promise<void> {
+async function createChatPanel(
+  column: vscode.ViewColumn = vscode.ViewColumn.Active,
+  options: { startThread?: boolean } = {},
+): Promise<PanelContext | null> {
   if (!(await ensureConnected(false)) || manager === null || panels === null || extensionContext === null) {
-    return;
+    return null;
   }
   const panelId = newPanelId();
   const panel = vscode.window.createWebviewPanel(VIEW_TYPE, "Codex Workbench", column, {
@@ -226,6 +231,12 @@ async function createChatPanel(column: vscode.ViewColumn = vscode.ViewColumn.Act
     livePanels.delete(panelId);
     persistBindings();
   });
+  if (options.startThread === false) {
+    // Bare chrome for resume flows: the caller binds a resumed thread next.
+    // No backend thread is started, so none leaks.
+    persistBindings();
+    return panelContext;
+  }
   try {
     const approvalPolicy = config<string>(APPROVAL_POLICY_KEY) ?? "on-request";
     const result = (await manager.startThread({ cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, approvalPolicy })) as Record<string, unknown>;
@@ -240,6 +251,7 @@ async function createChatPanel(column: vscode.ViewColumn = vscode.ViewColumn.Act
     void panel.webview.postMessage({ type: "ext/error", message: `thread/start failed: ${error instanceof Error ? error.message : String(error)}` });
   }
   persistBindings();
+  return panelContext;
 }
 
 function subscribePanel(panelContext: PanelContext): void {
@@ -261,9 +273,7 @@ async function hydratePanel(panelContext: PanelContext): Promise<void> {
   if (manager === null || panelContext.threadId === null) {
     return;
   }
-  // Paginated hydration: latest turns first, then items — never a full blob.
-  const turns = (await manager.listThreadTurns(panelContext.threadId, { limit: 10, sortDirection: "desc" })) as Record<string, unknown>;
-  void turns;
+  // Paginated hydration: latest items only — never a full blob.
   const items = (await manager.listThreadItems(panelContext.threadId, { limit: 50 })) as Record<string, unknown>;
   const data = Array.isArray(items["data"]) ? (items["data"] as Array<Record<string, unknown>>) : [];
   for (const entry of data) {
@@ -291,10 +301,10 @@ async function pickAndResume(): Promise<void> {
   if (picked === undefined) {
     return;
   }
-  await createChatPanel();
-  // Attach the resumed thread to the newest panel.
-  const newest = [...livePanels.values()].pop();
-  if (newest === undefined || manager === null) {
+  const newest = await createChatPanel(vscode.ViewColumn.Active, { startThread: false });
+  // Attach the resumed thread to the fresh panel. No backend thread leaks:
+  // createChatPanel skips thread/start for resume flows.
+  if (newest === null || manager === null) {
     return;
   }
   const threadId = String((picked.thread as Record<string, unknown>)["id"]);
@@ -453,11 +463,10 @@ async function handleWebviewMessage(panelContext: PanelContext, type: string, pa
     case "file/openDiff": {
       const candidate = diffCandidateFor(workspaceKey(), { path: String(record["uri"] ?? "") });
       if (candidate !== null) {
-        try {
-          await vscode.commands.executeCommand("vscode.diff", vscode.Uri.parse(candidate.uri), vscode.Uri.parse(candidate.uri), candidate.title);
-        } catch (error) {
-          log(`vscode.diff failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
+        // TODO(M4): open a real before/after pair once tool events carry one.
+        // Today only a single URI is available, so opening vscode.diff would
+        // show an empty diff — fail closed with an honest error instead.
+        void panelContext.panel.webview.postMessage({ type: "ext/error", message: `diff unavailable for ${candidate.title}: no before/after pair yet` });
       }
       break;
     }
@@ -552,7 +561,7 @@ function renderHtml(webview: vscode.Webview, panelId: string, threadId: string |
   }
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionContext.extensionUri, "media", "main.js"));
   const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionContext.extensionUri, "media", "main.css"));
-  const nonce = Buffer.from(String(Date.now())).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+  const nonce = randomBytes(18).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
   const initial = JSON.stringify({ panelId, threadId, draft }).replace(/</g, "\\u003c");
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">`
     + `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">`

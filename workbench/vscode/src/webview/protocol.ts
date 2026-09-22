@@ -55,6 +55,10 @@ export interface ApprovalDecidePayload {
 
 export const MAX_COMPOSER_TEXT = 64 * 1024;
 export const MAX_MENTIONS = 20;
+// Explicit approval results (e.g. permissions grants) ride the approval/decide
+// channel by design; bound them like composer text so a compromised renderer
+// cannot smuggle unbounded payloads into a backend response.
+export const MAX_APPROVAL_RESULT = 64 * 1024;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -102,6 +106,18 @@ export function validateWebviewMessage(raw: unknown): WebviewMessage | null {
       }
       if (typeof payload["approved"] !== "boolean") {
         return null;
+      }
+      const decisionResult = payload["result"];
+      if (decisionResult !== undefined) {
+        let serialized: string;
+        try {
+          serialized = JSON.stringify(decisionResult) ?? "";
+        } catch {
+          return null;
+        }
+        if (serialized.length > MAX_APPROVAL_RESULT) {
+          return null;
+        }
       }
       return { type, payload: { requestId, approved: payload["approved"] as boolean, result: payload["result"] } as ApprovalDecidePayload };
     }

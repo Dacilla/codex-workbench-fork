@@ -23,6 +23,13 @@ describe("validateWebviewMessage", () => {
     assert.equal(validateWebviewMessage("nope"), null);
     assert.equal(validateWebviewMessage({ type: "session/rename", payload: { name: "x".repeat(500) } }), null);
   });
+
+  it("bounds explicit approval results, accepts small ones", () => {
+    const small = validateWebviewMessage({ type: "approval/decide", payload: { requestId: "r-1", approved: true, result: { decision: "accept" } } });
+    assert.deepEqual(small, { type: "approval/decide", payload: { requestId: "r-1", approved: true, result: { decision: "accept" } } });
+    assert.equal(validateWebviewMessage({ type: "approval/decide", payload: { requestId: "r-1", approved: true, result: { blob: "x".repeat(70 * 1024) } } }), null);
+    assert.equal(validateWebviewMessage({ type: "approval/decide", payload: { requestId: "r-1", approved: false } })?.type, "approval/decide");
+  });
 });
 
 describe("sanitization", () => {
