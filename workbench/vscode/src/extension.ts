@@ -24,8 +24,9 @@ import { newPanelId } from "./sessions/ThreadRegistry";
 import type { PersistedPanelBinding } from "./sessions/ThreadRegistry";
 import { PanelRegistry } from "./sessions/PanelRegistry";
 import { SessionManager } from "./sessions/SessionManager";
+import { classifyApproval } from "./sessions/Approvals";
 import { normalizeThreadItem } from "./webview/normalize";
-import { validateWebviewMessage } from "./webview/protocol";
+import { extractUserInputQuestions, validateUserInputAnswers, validateWebviewMessage } from "./webview/protocol";
 
 const VIEW_TYPE = "codexWorkbench.chat";
 const STORAGE_KEY = "codexWorkbench.panelBindings";
@@ -74,11 +75,17 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     {
       onApprovalRequested: (approval) => {
-        // Log routing metadata only: summaries may echo tool output.
+        // Log routing metadata only: summaries may echo tool output, and
+        // user-input answers (incl. secrets) must never reach the log.
         log(`approval requested: ${approval.method} thread=${approval.threadId} request=${String(approval.requestId)}`);
         const owner = findPanelForThread(approval.threadId);
         if (owner !== null) {
-          void owner.panel.webview.postMessage({ type: "ext/approval", requestId: approval.requestId, method: approval.method, summary: approval.summary });
+          // Per-kind card data: the webview decides which controls to offer
+          // (Approve/Deny, Deny-only, or per-question answer forms). Only a
+          // bounded question excerpt crosses the boundary, never full bodies.
+          const kind = classifyApproval(approval.method);
+          const questions = kind === "userInput" ? extractUserInputQuestions(approval.params) : null;
+          void owner.panel.webview.postMessage({ type: "ext/approval", requestId: approval.requestId, method: approval.method, summary: approval.summary, kind, questions });
         }
       },
       onApprovalSettled: (approval, approved, failClosed) => {
@@ -714,6 +721,26 @@ async function handleWebviewMessage(panelContext: PanelContext, type: string, pa
       const ok = manager.decideApproval(requestId, { approved: record["approved"] === true, result: record["result"] });
       if (!ok) {
         void panelContext.panel.webview.postMessage({ type: "ext/error", message: "approval already settled; duplicate decision ignored" });
+      }
+      break;
+    }
+    case "approval/answer": {
+      // Per-question user-input answer. Shape was checked by
+      // validateWebviewMessage; re-check here (defense in depth) and forward
+      // through the existing decide channel — no new backend/session path.
+      // Only metadata is logged: answers may contain secrets.
+      const requestId = record["requestId"] as string | number;
+      const answers = validateUserInputAnswers(record["answers"]);
+      if (answers === null) {
+        log(`dropped malformed approval/answer for request=${String(requestId)}`);
+        void panelContext.panel.webview.postMessage({ type: "ext/error", message: "answer was malformed and ignored; the prompt stays open" });
+        break;
+      }
+      const ok = manager.decideApproval(requestId, { approved: true, result: { answers } });
+      if (!ok) {
+        void panelContext.panel.webview.postMessage({ type: "ext/error", message: "approval already settled; duplicate decision ignored" });
+      } else {
+        log(`approval answered: request=${String(requestId)} questions=${Object.keys(answers).length}`);
       }
       break;
     }
