@@ -37,6 +37,7 @@ Branch `feature/vscode-appserver`. Extension SHA: see commit log. Pinned protoco
 - [ ] Real-backend simultaneous-turn concurrency (documented trigger for revisiting single-server isolation).
 
 Full per-method status: `vscode-feature-matrix.md`. Known gaps: auth/connected-apps parity not claimed; webview ES-module load not yet rendered live; no Remote SSH run yet.
+- [x] Local Linux runtime validation (2026-09-22, Ubuntu 26.04.1 x64, Node 22.22.1, host `peanut`): `check-protocol-pin` OK, typecheck clean, lint OK, `node --test` 44/44 pass. VS Code GUI install/render smoke NOT run (headless).
 
 ## M4 — IDE client
 
