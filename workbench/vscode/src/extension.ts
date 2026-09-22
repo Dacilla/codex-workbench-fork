@@ -17,6 +17,7 @@ import type { HandshakeResult } from "./backend/ProtocolVersion";
 import { diffCandidateFor } from "./ide/DiffProvider";
 import { referenceFromEditorContext, renderReferenceAsMention } from "./ide/UriContext";
 import type { EventRouter, ThreadSink } from "./sessions/EventRouter";
+import { ConnectGate } from "./sessions/ConnectGate";
 import { newPanelId } from "./sessions/ThreadRegistry";
 import { PanelRegistry } from "./sessions/PanelRegistry";
 import { SessionManager } from "./sessions/SessionManager";
@@ -122,12 +123,23 @@ function config<T>(key: string): T | undefined {
   return vscode.workspace.getConfiguration().get<T>(key);
 }
 
+const connectGate = new ConnectGate();
+
 async function ensureConnected(silent: boolean): Promise<boolean> {
   if (manager === null) {
     return false;
   }
   if (manager.connectionState === "ready") {
     return true;
+  }
+  // Concurrent callers (e.g. auto-connect at activation racing New Chat)
+  // share one in-flight attempt instead of tripping "already in progress".
+  return connectGate.run(() => doConnect(silent));
+}
+
+async function doConnect(silent: boolean): Promise<boolean> {
+  if (manager === null) {
+    return false;
   }
   let executable: string;
   try {
