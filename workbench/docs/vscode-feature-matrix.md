@@ -103,6 +103,46 @@ live interactive click-through UNTESTED for every kind):
   extension (spec 4.3 high-risk item). The client surfaces `account/updated`
   notifications but does not implement login flows.
 
+## Collaboration mode (question-tool toggle)
+
+- `codexWorkbench.selectMode` QuickPick (`Default` / `Plan`) per focused
+  thread: Plan enables the model-side question tool
+  (`item/tool/requestUserInput`; `allows_request_user_input()` is true only
+  for `Plan` in pinned `codex-rs/protocol/src/config_types.rs`), Default
+  does not. One-line descriptions in the picker state exactly this.
+- Applied post-start via experimental `thread/settings/update` with
+  `{threadId, collaborationMode: {mode, settings: {model, reasoning_effort,
+  developer_instructions: null}}}` (outer camelCase, `settings` snake_case
+  per pinned `Settings`; `null` instructions = built-in preset). Only the
+  `collaborationMode` key is sent. `thread/start` itself is unchanged — it
+  has no mode slot (verified in generated `ThreadStartParams.ts`).
+- `settings.model`/`reasoning_effort` echo the thread's current values
+  (explicit option → user pin → backend-reported) because a
+  `Some(collaboration_mode)` REPLACES mode+settings server-side; blanks
+  would clobber model/effort pins. Unknown model → honest throw, never an
+  empty send. Local mode records only after transport success; rejections
+  leave header + registry untouched.
+- EXPERIMENTAL: the whole method requires the `experimentalApi` handshake
+  capability (variant-level `#[experimental("thread/settings/update")]` in
+  `common.rs` wins over field-level gating; the server rejects otherwise).
+  The client now handshakes with `experimentalApi: true` (opt-in permits
+  methods; stable behavior unchanged).
+- Header appends `· mode: <plan|default>` via the existing `ext/model`
+  event (optional `mode` field; absent = keep current; never "unknown").
+  New threads inherit the last chosen mode (applied post-start; on failure
+  the thread stays honestly `default`); mode persists in panel bindings
+  only when non-default; restore is local-only (resume is expected to echo
+  the persisted `collaborationMode`).
+- Status: LIVE-FAKE (request shape incl. echo-back, fail-closed paths,
+  registry inheritance/persistence, reducer + segment, handshake flag —
+  `npm test` → "mode payload", "mode validation", "ThreadRegistry
+  collaboration modes", "ext/model mode header state", "experimental
+  handshake flag"). UNTESTED live: official-backend acceptance of
+  `thread/settings/update` with `collaborationMode` (incl. the
+  experimental gate on a non-fake server), a real Plan-mode question round
+  trip, Extension Host rendering of the segment/QuickPick, window-reload
+  mode restore vs resume echo, and any billed turn under Plan mode.
+
 ## Unsupported / deferred in this slice
 
 - `thread/realtime/*` (voice), `command/exec*` PTY hosting, `fs/*` direct

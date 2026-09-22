@@ -60,10 +60,16 @@ export interface ConversationState {
   effort: string | null;
   /** Catalog display name for `model` where known; null = show the raw id. */
   modelLabel: string | null;
+  /**
+   * Confirmed-or-inherited collaboration mode for this thread ("default" |
+   * "plan"). "default" is the honest backend default, never "unknown".
+   * Rendered via textContent only (no HTML), like the model segment.
+   */
+  mode: "default" | "plan";
 }
 
 export function initialState(): ConversationState {
-  return { items: [], approvals: [], turnStatus: "idle", activeTurnId: null, connection: "connecting", error: null, droppedEvents: 0, mcp: {}, model: null, effort: null, modelLabel: null, awaitingFirstToken: false };
+  return { items: [], approvals: [], turnStatus: "idle", activeTurnId: null, connection: "connecting", error: null, droppedEvents: 0, mcp: {}, model: null, effort: null, modelLabel: null, mode: "default", awaitingFirstToken: false };
 }
 
 export type ExtensionEvent =
@@ -76,7 +82,9 @@ export type ExtensionEvent =
   | { type: "ext/error"; message: string }
   | { type: "ext/connection"; state: string; detail: string; droppedEvents?: number }
   | { type: "ext/mcpStatus"; server: string; status: string; hasError: boolean }
-  | { type: "ext/model"; model: string | null; effort: string | null; displayName: string | null };
+  // `mode` rides the existing model header event (no second header event):
+  // optional so older host messages still decode; absent = keep current.
+  | { type: "ext/model"; model: string | null; effort: string | null; displayName: string | null; mode?: "default" | "plan" };
 
 const MAX_ITEMS = 2000;
 const MAX_TEXT_PER_ITEM = 256 * 1024;
@@ -175,10 +183,13 @@ export function reduce(state: ConversationState, event: ExtensionEvent): Convers
     }
     case "ext/model": {
       // Bounded like mcpStatus: a pathological backend must not grow state.
+      // Mode is strict: only the two literals are stored; anything else
+      // keeps the current mode (fail closed, never "unknown").
       const model = event.model !== null && event.model.length > 0 ? event.model.slice(0, 200) : null;
       const effort = event.effort !== null && event.effort.length > 0 ? event.effort.slice(0, 100) : null;
       const displayName = event.displayName !== null && event.displayName.length > 0 ? event.displayName.slice(0, 200) : null;
-      return { ...state, model, effort, modelLabel: displayName };
+      const mode = event.mode === "plan" || event.mode === "default" ? event.mode : state.mode;
+      return { ...state, model, effort, modelLabel: displayName, mode };
     }
     default: {
       return state;
@@ -198,6 +209,16 @@ export function formatModelSegment(model: string | null, effort: string | null, 
   }
   const label = displayName ?? model ?? "default";
   return ` · model: ${label}${effort !== null ? ` · effort: ${effort}` : ""}`;
+}
+
+/**
+ * Header segment for the collaboration mode. Always rendered (default is the
+ * honest backend default, not a missing value). Anything other than "plan"
+ * renders as "default": fail closed, never "unknown". Rendered via
+ * textContent only (no HTML).
+ */
+export function formatModeSegment(mode: string | null): string {
+  return ` · mode: ${mode === "plan" ? "plan" : "default"}`;
 }
 
 function isCollapsibleKind(kind: string): boolean {

@@ -73,6 +73,10 @@
       {
         "command": "codexWorkbench.selectEffort",
         "title": "Codex Workbench: Select Reasoning Effort"
+      },
+      {
+        "command": "codexWorkbench.selectMode",
+        "title": "Codex Workbench: Select Collaboration Mode"
       }
     ],
     "configuration": {
@@ -106,6 +110,7 @@
     "onCommand:codexWorkbench.showLogs",
     "onCommand:codexWorkbench.selectModel",
     "onCommand:codexWorkbench.selectEffort",
+    "onCommand:codexWorkbench.selectMode",
     "onWebviewPanel:codexWorkbench.chat"
   ],
   "devDependencies": {

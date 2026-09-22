@@ -11,6 +11,12 @@
  *   `{ id, result }` (exactly-once + fail-closed assertions).
  * - `--record-turns`: append every `turn/start` *request params received* as
  *   JSONL `{ id, params }` (model/effort override forwarding assertions).
+ * - `--record-modes`: append every `thread/settings/update` *request params
+ *   received* as JSONL `{ id, params }` (collaboration-mode payload shape
+ *   assertions). Unknown threads are rejected, like the real backend.
+ * - `--record-init`: append every `initialize` *request params received* as
+ *   JSONL `{ id, params }` (handshake capability assertions, e.g. that the
+ *   client opts into `experimentalApi` for the settings/update escape hatch).
  *
  * A turn whose text contains `[ask-approval]` triggers one
  * `item/commandExecution/requestApproval` server request and completes the
@@ -23,10 +29,12 @@ interface Args {
   dieAfterMs: number;
   recordPath: string | null;
   recordTurnsPath: string | null;
+  recordModesPath: string | null;
+  recordInitPath: string | null;
 }
 
 function parseArgs(): Args {
-  const args: Args = { hang: new Set(), dieAfterMs: 0, recordPath: null, recordTurnsPath: null };
+  const args: Args = { hang: new Set(), dieAfterMs: 0, recordPath: null, recordTurnsPath: null, recordModesPath: null, recordInitPath: null };
   for (const raw of process.argv.slice(2)) {
     if (raw.startsWith("--hang=")) {
       args.hang.add(raw.slice("--hang=".length));
@@ -36,6 +44,10 @@ function parseArgs(): Args {
       args.recordPath = raw.slice("--record=".length);
     } else if (raw.startsWith("--record-turns=")) {
       args.recordTurnsPath = raw.slice("--record-turns=".length);
+    } else if (raw.startsWith("--record-modes=")) {
+      args.recordModesPath = raw.slice("--record-modes=".length);
+    } else if (raw.startsWith("--record-init=")) {
+      args.recordInitPath = raw.slice("--record-init=".length);
     }
   }
   return args;
@@ -61,6 +73,13 @@ function recordTurnStart(id: unknown, params: Record<string, unknown>): void {
   fs.appendFileSync(args.recordTurnsPath, `${JSON.stringify({ id, params })}\n`);
 }
 
+function recordParams(recordPath: string | null, id: unknown, params: Record<string, unknown>): void {
+  if (recordPath === null) {
+    return;
+  }
+  fs.appendFileSync(recordPath, `${JSON.stringify({ id, params })}\n`);
+}
+
 let threadCounter = 0;
 let turnCounter = 0;
 const threads = new Map<string, { id: string; preview: string }>();
@@ -83,6 +102,7 @@ function handleRequest(id: unknown, method: string, params: Record<string, unkno
   switch (method) {
     case "initialize": {
       const info = platformInfo();
+      recordParams(args.recordInitPath, id, params);
       send({
         id,
         result: {
@@ -192,6 +212,19 @@ function handleRequest(id: unknown, method: string, params: Record<string, unkno
       const turnId = String(params["turnId"] ?? "");
       send({ id, result: {} });
       send({ method: "turn/completed", params: { threadId, turn: { id: turnId, items: [], itemsView: "summary", status: "interrupted", error: null, startedAt: 1, completedAt: 2, durationMs: 1 } }, emittedAtMs: Date.now() });
+      break;
+    }
+    case "thread/settings/update": {
+      // Fail closed like the real backend: unknown threads are rejected, and
+      // the fake deliberately does NOT enforce the experimentalApi gate (gating
+      // is verified by code inspection + the handshake-flag test instead).
+      const threadId = String(params["threadId"] ?? "");
+      if (!threads.has(threadId)) {
+        send({ id, error: { code: -32000, message: `unknown thread ${threadId}` } });
+        break;
+      }
+      recordParams(args.recordModesPath, id, params);
+      send({ id, result: {} });
       break;
     }
     case "model/list": {

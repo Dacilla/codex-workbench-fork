@@ -9,7 +9,7 @@ import { renderSafeText } from "./Conversation.js";
 import { sessionPickerHtml } from "./SessionPicker.js";
 import { toolCardHtml } from "./ToolActivity.js";
 import type { ApprovalCard, ChatItem, ConversationState, ExtensionEvent } from "./state.js";
-import { formatModelSegment, initialState, reduce } from "./state.js";
+import { formatModelSegment, formatModeSegment, initialState, reduce } from "./state.js";
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void; getState(): unknown; setState(state: unknown): void };
 
@@ -36,7 +36,7 @@ function render(): void {
   const status = document.getElementById("wb-status");
   if (status !== null) {
     const turn = state.turnStatus === "idle" ? "idle" : state.turnStatus;
-    status.textContent = `${state.connection} · ${turn}${state.activeTurnId !== null ? ` (${state.activeTurnId.slice(0, 8)})` : ""}${formatModelSegment(state.model, state.effort, state.modelLabel)}${mcpSegment()}${state.droppedEvents > 0 ? ` · ${state.droppedEvents} buffered events dropped` : ""}${state.error !== null ? ` · ${state.error}` : ""}`;
+    status.textContent = `${state.connection} · ${turn}${state.activeTurnId !== null ? ` (${state.activeTurnId.slice(0, 8)})` : ""}${formatModelSegment(state.model, state.effort, state.modelLabel)}${formatModeSegment(state.mode)}${mcpSegment()}${state.droppedEvents > 0 ? ` · ${state.droppedEvents} buffered events dropped` : ""}${state.error !== null ? ` · ${state.error}` : ""}`;
   }
   if (convo === null) {
     return;

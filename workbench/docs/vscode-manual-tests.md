@@ -78,6 +78,45 @@ real-backend `model/list` values, Extension Development Host rendering of
 the header/QuickPick, window-reload pin restore, and any billed model turn
 with a pin.
 
+## 6. Collaboration mode toggle (question tool)
+
+Requires a backend that accepts experimental `thread/settings/update`
+with `collaborationMode` (no auth needed to observe a rejection; a model
+turn needs auth + quota).
+
+1. Open a chat tab → header ends with `· mode: default`.
+2. Command Palette → `Codex Workbench: Select Collaboration Mode` →
+   QuickPick shows Default ("question tool is unavailable") and Plan
+   ("can ask questions with the question tool"), current marked →
+   pick Plan → header shows `· mode: plan`.
+3. Against a backend WITHOUT experimental support (or an older official
+   binary without the method): picking Plan must show an honest error
+   (`collaboration mode change failed: …`) and the header must STAY at
+   `· mode: default` — never a faked success.
+4. `New Chat in Editor Tab` → new thread inherits Plan automatically
+   (header already shows it). If inheritance fails, the tab shows an
+   honest `collaboration mode inheritance failed` error and stays
+   `default`.
+5. Pick Default on a Plan thread → header returns to `· mode: default`;
+   this IS sent (explicit change), unlike the untouched default.
+6. Reload the window → plan binding restores; header re-renders after
+   re-resume. If the backend lost the mode across resume, re-pick it.
+7. Opt-in live question round trip (costs quota): in Plan mode, prompt
+   the model to ask a clarifying question → the per-question Answer card
+   appears → answer → turn continues.
+
+Live-tested vs not: payload shape (incl. model/effort echo-back),
+fail-closed rejects (unknown thread/mode/model), registry
+inheritance/persistence, reducer + `· mode:` segment, and the
+`experimentalApi: true` handshake flag are covered by `npm test` →
+"mode payload", "mode validation", "ThreadRegistry collaboration
+modes", "ext/model mode header state", "experimental handshake flag"
+(fake transport over real stdio; the fake does NOT enforce the
+experimental gate). NOT live-tested: real-backend acceptance of the
+update (any backend at all), a real Plan-mode question round trip,
+Extension Host rendering of the segment/QuickPick, window-reload mode
+restore against a real backend, billed turns under Plan mode.
+
 ## Known gaps (not certifying)
 
 - Live model turns, live interactive approvals, real-backend concurrency

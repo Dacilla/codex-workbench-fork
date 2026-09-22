@@ -8,6 +8,9 @@
  * Closing a tab removes the panel binding. It never deletes the thread.
  */
 
+import type { CollaborationModeKind } from "./CollaborationMode";
+import { DEFAULT_COLLABORATION_MODE } from "./CollaborationMode";
+
 export interface PersistedPanelBinding {
   panelId: string;
   threadId: string;
@@ -22,6 +25,13 @@ export interface PersistedPanelBinding {
    */
   model?: string;
   effort?: string;
+  /**
+   * Explicitly chosen collaboration mode ("default" | "plan"), restored into
+   * the mode map on reload. Absent (or any other string) = never chosen;
+   * the backend default ("default") applies. Written by persistBindings only
+   * when non-default so untouched threads persist no mode key at all.
+   */
+  mode?: string;
 }
 
 export interface ThreadRecord {
@@ -85,6 +95,20 @@ export class ThreadRegistry {
    * explicit user selection — so "unset" stays honest.
    */
   private lastChosen: ThreadModelOverride = { model: null, effort: null };
+  /**
+   * Per-thread confirmed collaboration modes, keyed by thread id. Written
+   * only after a successful `thread/settings/update` (SessionManager),
+   * after a validated persist restore, or via the failure fallback
+   * (pinThreadMode) — never optimistically — so the header stays truthful.
+   */
+  private readonly modes = new Map<string, CollaborationModeKind>();
+  /**
+   * Last explicitly chosen mode, session-scoped. New threads inherit it
+   * (applied post-start via `thread/settings/update`; `thread/start` has no
+   * mode slot). Only explicit user selection changes it — never backend
+   * echoes — so "unset" stays the honest backend default.
+   */
+  private lastMode: CollaborationModeKind = DEFAULT_COLLABORATION_MODE;
 
   constructor(private readonly storage: RegistryStorage = new InMemoryStorage()) {
     this.bindings = storage.readBindings();
@@ -164,6 +188,51 @@ export class ThreadRegistry {
       params.effort = effective.effort;
     }
     return params;
+  }
+
+  /**
+   * Record an explicit user mode choice for a thread. Also becomes the
+   * session-scoped last-chosen default inherited by new threads (mirrors
+   * setThreadOverride). Call only after the backend confirmed the update.
+   */
+  setThreadMode(threadId: string, mode: CollaborationModeKind): CollaborationModeKind {
+    this.modes.set(threadId, mode);
+    this.lastMode = mode;
+    return this.effectiveMode(threadId);
+  }
+
+  /**
+   * Record a mode for a thread WITHOUT touching the inherited default.
+   * Used for (a) the new-thread inheritance fallback when the post-start
+   * `thread/settings/update` fails — the thread is honestly "default" while
+   * the session default stays whatever the user chose — and (b) internal
+   * corrections. Never for explicit user picks (those use setThreadMode).
+   */
+  pinThreadMode(threadId: string, mode: CollaborationModeKind): CollaborationModeKind {
+    this.modes.set(threadId, mode);
+    return this.effectiveMode(threadId);
+  }
+
+  /**
+   * Record an explicit mode choice with no thread attached yet (e.g. picking
+   * a mode while the panel has no thread). Becomes the inherited default.
+   */
+  rememberModeChoice(mode: CollaborationModeKind): void {
+    this.lastMode = mode;
+  }
+
+  /** Session-scoped last explicitly chosen mode. */
+  lastChosenMode(): CollaborationModeKind {
+    return this.lastMode;
+  }
+
+  /**
+   * The confirmed-or-inherited mode for a thread: its own confirmed pin,
+   * falling back to the last explicitly chosen value (new threads inherit).
+   * "default" when nothing was ever chosen — the honest backend default.
+   */
+  effectiveMode(threadId: string): CollaborationModeKind {
+    return this.modes.get(threadId) ?? this.lastMode;
   }
 
   bindPanel(panelId: string, threadId: string, displayName: string, workspaceKey: string): void {
