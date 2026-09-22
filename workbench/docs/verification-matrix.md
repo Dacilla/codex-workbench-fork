@@ -42,7 +42,16 @@ Branch `feature/vscode-appserver`. Extension SHA: see commit log. Pinned protoco
 Full per-method status: `vscode-feature-matrix.md`. Known gaps: auth/connected-apps parity not claimed; webview ES-module load not yet rendered live; no Remote SSH run yet.
 - [x] Local Linux runtime validation (2026-09-22, Ubuntu 26.04.1 x64, Node 22.22.1, host `peanut`): `check-protocol-pin` OK, typecheck clean, lint OK, `node --test` 44/44 pass. VS Code GUI install/render smoke NOT run (headless).
 
-## M4 — IDE client
+## M4 — IDE client (external review triage, 2026-09-22 — all 12 items verified)
+
+- [x] ThreadItem normalization keystone: `normalizeThreadItem()` boundary (App Server ThreadItem → ViewItem) using real generated shapes; `mcpCall`→`mcpToolCall` remap; content-free/unknown variants dropped with logging instead of kind labels; command output detail keeps tail; fixtures mirror generated types. 63/63 suite green (merges `2250bc2`, `d45c2e8`). Reviewer's duplicate-fix-will-fail prediction addressed (backend echo now normalizes real `content[]` shapes).
+- [x] Workspace Trust honest (`supported:false`), VSIX packaging shell-free (verified), release tag guards (branch/pin/naming), handoff record committed in-repo, recursion workaround reverted (verified green under pinned 1.95.0). Merge `7bf74bd`.
+- [ ] Approval per-kind UI (Approve shown for permissions/userInput/dynamicTool that fail closed into deny).
+- [ ] Focus-aware multi-panel commands (attach/rename use first-visible, wrong in splits) + same-thread-in-two-panels approval ownership (proposed: forbid, reveal existing instead).
+- [ ] Official-backend fallback gating (handshake allows writes on drifted servers; propose known-compatible full vs unknown read-only/explicit-override).
+- [ ] Upstream sync decision (6 commits behind incl. gateway-OAuth protocol addition; assess file-level impact before rebasing).
+
+## M5 — Remote + releases (Linux host leg, `alfie` Ubuntu 26.04.1 x64)
 
 - [ ] VS Code-themed layout, compact tool cards, file context, native diff, session picker, model controls (as supported), CSP/sanitization, state restoration
 
