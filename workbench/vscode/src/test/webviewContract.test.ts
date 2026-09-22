@@ -2,6 +2,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { escapeHtml, sanitizeLinkUrl, validateWebviewMessage } from "../webview/protocol";
+import { renderSafeText } from "../webview/Conversation";
 import { initialState, reduce } from "../webview/state";
 import { toolCardHtml } from "../webview/ToolActivity";
 import { isRemoteUri, referenceFromEditorContext, renderReferenceAsMention } from "../ide/UriContext";
@@ -39,6 +40,21 @@ describe("sanitization", () => {
     assert.equal(sanitizeLinkUrl("https://example.com/a"), "https://example.com/a");
     assert.equal(sanitizeLinkUrl("javascript:alert(1)"), null);
     assert.equal(sanitizeLinkUrl("vscode-remote://host/x"), null);
+  });
+
+  it("renders fenced code blocks with language labels, never as markup", () => {
+    const html = renderSafeText("Here:\n```cpp\n#include <x>\nint main() {}\n```\nDone `y`.");
+    assert.ok(html.includes('<div class="wb-codeblock">'));
+    assert.ok(html.includes('<div class="wb-codeblock-lang">cpp</div>'));
+    assert.ok(html.includes("#include &lt;x&gt;"), "fence body stays escaped");
+    assert.ok(!html.includes("<x>"));
+    assert.ok(html.includes("<code>y</code>"), "inline code still works outside fences");
+    const unclosed = renderSafeText("Start\n```py\nprint(1)");
+    assert.ok(unclosed.includes('<div class="wb-codeblock-lang">py</div>'));
+    assert.ok(unclosed.includes("print(1)"));
+    const fencedInline = renderSafeText("```\n**not bold** and `not code`\n```");
+    assert.ok(!fencedInline.includes("<strong>"), "no inline markdown inside fences");
+    assert.ok(!fencedInline.includes("<code>not code</code>"));
   });
 
   it("rejects non-JSON and non-object wire lines", () => {
