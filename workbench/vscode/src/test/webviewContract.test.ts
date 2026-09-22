@@ -151,6 +151,18 @@ describe("conversation reducer", () => {
     state = reduce(state, { type: "ext/turnStatus", turnId: "t-2", status: "completed" });
     assert.equal(state.awaitingFirstToken, false, "terminal status clears the placeholder");
   });
+
+  it("keeps the placeholder through our own echo, clears on agent content", () => {
+    let state = initialState();
+    state = reduce(state, { type: "ext/item", turnId: "local", itemId: "local-1", kind: "userMessage", text: "hi" });
+    state = reduce(state, { type: "ext/turnStatus", turnId: "t-1", status: "inProgress" });
+    assert.equal(state.awaitingFirstToken, true);
+    state = reduce(state, { type: "ext/item", turnId: "t-1", itemId: "backend-1", kind: "userMessage", text: "hi" });
+    assert.equal(state.items.length, 1, "echo adopted");
+    assert.equal(state.awaitingFirstToken, true, "backend echo is not agent content");
+    state = reduce(state, { type: "ext/item", turnId: "t-1", itemId: "backend-2", kind: "agentMessage", text: "hello" });
+    assert.equal(state.awaitingFirstToken, false);
+  });
 });
 
 describe("IDE helpers", () => {
