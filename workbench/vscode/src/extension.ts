@@ -678,6 +678,13 @@ async function handleWebviewMessage(panelContext: PanelContext, type: string, pa
         void panelContext.panel.webview.postMessage({ type: "ext/connection", state: snapshot.state, detail: snapshot.detail });
       }
       postModelState(panelContext);
+      // A recreated webview starts blank while the host binding survives:
+      // re-attach the live thread and backfill history, or the tab looks
+      // "reset" after every hide/show cycle.
+      if (manager !== null && panelContext.threadId !== null) {
+        subscribePanel(panelContext);
+        await hydratePanel(panelContext);
+      }
       break;
     case "composer/send": {
       if (panelContext.threadId === null) {
@@ -795,8 +802,10 @@ function routeToPanel(panelContext: PanelContext, method: string, params: unknow
     }
     case "thread/started": {
       // Lifecycle bookkeeping only; the thread is already known from the
-      // thread/start response. Never a timeline card.
-      log(`thread/started: ${typeof record["threadId"] === "string" ? (record["threadId"] as string) : "unknown"}`);
+      // thread/start response. Never a timeline card. Params carry a nested
+      // thread object ({ thread: { id, ... } }), not a top-level threadId.
+      const nested = (record["thread"] ?? {}) as Record<string, unknown>;
+      log(`thread/started: ${typeof nested["id"] === "string" ? (nested["id"] as string) : "unknown"}`);
       break;
     }
     case "mcpServer/startupStatus/updated": {
