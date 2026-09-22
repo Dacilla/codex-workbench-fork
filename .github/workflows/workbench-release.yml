@@ -1,0 +1,135 @@
+# Workbench release — tag-triggered native packages + VSIX + draft release.
+#
+# Tag convention: workbench-vX.Y.Z+upstream.<short-sha> (unambiguous version
+# mapping per the architecture doc; UPSTREAM_SHA + patch list ship in the
+# release notes via workbench/docs/upstream-changes.md).
+#
+# This workflow NEVER publishes: it assembles the tested packages, checksums
+# them, and opens a *draft* GitHub release for human review. npm publishing
+# is M2 work (see workbench/packaging/README.md) and requires explicit
+# authorization + registry credentials.
+#
+# upload/download-artifact use tags (accepted deviation; see workbench-ci.yml).
+
+name: workbench-release
+
+on:
+  push:
+    tags: ["workbench-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  native:
+    name: native package (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: codex-workbench-windows-x64.zip
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            archive: codex-workbench-linux-x64.tar.gz
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install musl tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Install just
+        uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: just@1.51.0
+      - name: Derive package version from tag
+        id: version
+        shell: bash
+        run: |
+          # workbench-v1.2.3+upstream.abcdef -> 1.2.3
+          ref="${GITHUB_REF_NAME:-workbench-v0.0.0+upstream.dev}"
+          ver="${ref#workbench-v}"
+          ver="${ver%%+*}"
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+      - name: Assemble canonical package + archive
+        run: just assemble-codex-package --variant codex --target ${{ matrix.target }} --cargo-profile release --package-version ${{ steps.version.outputs.version }} --package-dir dist/pkg --archive-output dist/${{ matrix.archive }} --force
+      - name: Checksums (Linux)
+        if: runner.os == 'Linux'
+        run: (cd dist && sha256sum "${{ matrix.archive }}") | tee "dist/${{ matrix.archive }}.sha256"
+        shell: bash
+      - name: Checksums (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $h = (Get-FileHash "dist/${{ matrix.archive }}" -Algorithm SHA256).Hash.ToLower()
+          "$h  ${{ matrix.archive }}" | Out-File "dist/${{ matrix.archive }}.sha256" -Encoding ascii
+          Get-Content "dist/${{ matrix.archive }}.sha256"
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: |
+            dist/${{ matrix.archive }}
+            dist/${{ matrix.archive }}.sha256
+          if-no-files-found: error
+
+  vsix:
+    name: frontend-only VSIX
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: workbench/vscode
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: "23"
+          cache: npm
+          cache-dependency-path: workbench/vscode/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build + package VSIX
+        run: npm run build && npm run build:webview && npm run package
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: workbench/vscode/*.vsix
+          if-no-files-found: error
+
+  draft-release:
+    name: draft GitHub release
+    needs: [native, vsix]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Create draft release (no publish)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -la release-assets
+          {
+            echo "Codex Workbench ${GITHUB_REF_NAME}"
+            echo
+            echo "Base upstream: $(cat workbench/UPSTREAM_SHA)"
+            echo "Patches: workbench/docs/upstream-changes.md"
+            echo "Verification: workbench/docs/verification-matrix.md"
+          } > release-notes.md
+          gh release create "${GITHUB_REF_NAME}" --draft --title "${GITHUB_REF_NAME}" --notes-file release-notes.md release-assets/*

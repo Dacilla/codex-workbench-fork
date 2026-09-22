@@ -21,7 +21,8 @@ use codex_app_server_protocol::McpToolCallStatus;
 use codex_app_server_protocol::ThreadItem;
 use codex_config::types::ToolCallDisplay;
 use codex_protocol::mcp::CallToolResult;
-use codex_protocol::parse_command::ParsedCommand;use ratatui::style::Stylize as _;
+use codex_protocol::parse_command::ParsedCommand;
+use ratatui::style::Stylize as _;
 use ratatui::text::Line;
 
 /// Preserve status and output when replay cannot reconstruct a rich completed tool cell.

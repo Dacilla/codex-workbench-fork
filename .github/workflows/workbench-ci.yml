@@ -1,0 +1,126 @@
+# Workbench CI — PR/push gates for Codex Workbench tracks.
+#
+# Upstream Rust CI (rust-ci.yml etc.) still runs on this fork and covers the
+# full workspace. These jobs add workbench-specific gates only:
+#  - VS Code extension typecheck/lint/unit tests (both OSes)
+#  - Protocol-pin gate (pinned SHA equality vs workbench/UPSTREAM_SHA)
+#  - Targeted TUI tests for the compact-display patch (+ fmt/clippy, mirroring
+#    upstream flags: `cargo fmt -- --config imports_granularity=Item --check`)
+#  - Secret scan over the diff
+#
+# Action pins reuse SHAs already reviewed in upstream workflows where
+# available; rust-cache and gitleaks use tags (accepted deviation).
+# Release flow lives in workbench-release.yml (tag-triggered, draft only).
+
+name: workbench-ci
+
+on:
+  pull_request:
+    branches: ["workbench/main"]
+  push:
+    branches: ["workbench/main"]
+  workflow_dispatch:
+
+concurrency:
+  group: workbench-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  vscode:
+    name: vscode typecheck/lint/test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: workbench/vscode
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: "23"
+          cache: npm
+          cache-dependency-path: workbench/vscode/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Protocol pin gate
+        run: npm run check-protocol-pin
+      - name: Typecheck (extension + webview)
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Build (extension + webview)
+        run: npm run build && npm run build:webview
+      - name: Unit tests (fake app-server, no network)
+        run: node --test out/test/*.test.js
+
+  tui-display-policy:
+    name: TUI fmt/clippy/display-policy tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      RUST_MIN_STACK: "8388608"
+      NEXTEST_PROFILE: local
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: workbench-tui
+      - name: Install just and nextest
+        uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: just@1.51.0,nextest
+      - name: Formatting check (mirrors upstream flags)
+        run: cargo fmt -- --config imports_granularity=Item --check
+      - name: Clippy (TUI + touched config crates)
+        run: cargo clippy --tests -p codex-tui -p codex-config -p codex-core
+      # NOTE: `just test` on Windows drops filter args (pwsh shim), so call
+      # nextest directly for precise targeted runs on both OSes.
+      - name: Display-policy + history-cell tests
+        run: cargo nextest run --no-fail-fast -p codex-tui display_policy history_cell
+      - name: Config schema tests
+        run: cargo nextest run --no-fail-fast -p codex-config
+
+  secret-scan:
+    name: secret scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  npm-pack-check:
+    name: npm wrapper dry-run
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: "23"
+      - name: Verify packaging notes require binary reuse
+        run: |
+          test -f workbench/packaging/README.md
+          grep -q "same tested binary package" workbench/packaging/README.md
