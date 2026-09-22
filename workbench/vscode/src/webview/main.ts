@@ -49,6 +49,9 @@ function render(): void {
   for (const item of state.items) {
     parts.push(renderItem(item));
   }
+  if (state.awaitingFirstToken) {
+    parts.push(`<div class="wb-pending" aria-live="polite"><span class="wb-pending-dot"></span>Working…</div>`);
+  }
   for (const card of state.approvals) {
     parts.push(approvalCardHtml(card));
   }

@@ -35,6 +35,8 @@ export interface ConversationState {
   droppedEvents: number;
   /** Compact per-server MCP status (update-in-place, never timeline cards). */
   mcp: Record<string, { status: string; hasError: boolean }>;
+  /** True between turn start and the first streamed/final content. */
+  awaitingFirstToken: boolean;
   /**
    * Effective model for the next turn: the user-pinned id when set, else the
    * backend-reported thread model. Null = backend default (header shows
@@ -48,7 +50,7 @@ export interface ConversationState {
 }
 
 export function initialState(): ConversationState {
-  return { items: [], approvals: [], turnStatus: "idle", activeTurnId: null, connection: "connecting", error: null, droppedEvents: 0, mcp: {}, model: null, effort: null, modelLabel: null };
+  return { items: [], approvals: [], turnStatus: "idle", activeTurnId: null, connection: "connecting", error: null, droppedEvents: 0, mcp: {}, model: null, effort: null, modelLabel: null, awaitingFirstToken: false };
 }
 
 export type ExtensionEvent =
@@ -88,7 +90,7 @@ export function reduce(state: ConversationState, event: ExtensionEvent): Convers
         }
         items[index] = { ...current, text: clipText(current.text + event.delta) };
       }
-      return { ...state, items: items.slice(-MAX_ITEMS) };
+      return { ...state, items: items.slice(-MAX_ITEMS), awaitingFirstToken: false };
     }
     case "ext/item": {
       const items = [...state.items];
@@ -96,7 +98,7 @@ export function reduce(state: ConversationState, event: ExtensionEvent): Convers
       const index = items.findIndex((item) => item.itemId === event.itemId);
       if (index !== -1) {
         items[index] = finalized;
-        return { ...state, items: items.slice(-MAX_ITEMS) };
+        return { ...state, items: items.slice(-MAX_ITEMS), awaitingFirstToken: false };
       }
       // Adopt the optimistic local echo: the backend re-emits our sent
       // message as its own item, which would otherwise double-render.
@@ -104,14 +106,17 @@ export function reduce(state: ConversationState, event: ExtensionEvent): Convers
         const local = items.findIndex((item) => item.kind === "userMessage" && item.turnId === "local" && item.text === finalized.text);
         if (local !== -1) {
           items[local] = finalized;
-          return { ...state, items: items.slice(-MAX_ITEMS) };
+          return { ...state, items: items.slice(-MAX_ITEMS), awaitingFirstToken: false };
         }
       }
       items.push(finalized);
-      return { ...state, items: items.slice(-MAX_ITEMS) };
+      return { ...state, items: items.slice(-MAX_ITEMS), awaitingFirstToken: false };
     }
     case "ext/turnStatus": {
-      return { ...state, turnStatus: event.status, activeTurnId: event.turnId, error: event.status === "failed" ? state.error : null };
+      // Entering a turn arms the "working" placeholder; any content or a
+      // terminal status clears it.
+      const pending = event.status === "inProgress";
+      return { ...state, turnStatus: event.status, activeTurnId: event.turnId, awaitingFirstToken: pending, error: event.status === "failed" ? state.error : null };
     }
     case "ext/approval": {
       if (state.approvals.some((card) => String(card.requestId) === String(event.requestId))) {
