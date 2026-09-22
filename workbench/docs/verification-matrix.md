@@ -45,8 +45,9 @@ Full per-method status: `vscode-feature-matrix.md`. Known gaps: auth/connected-a
 
 - [ ] VS Code-themed layout, compact tool cards, file context, native diff, session picker, model controls (as supported), CSP/sanitization, state restoration
 
-## M5 — Remote + releases
+## M5 — Remote + releases (Linux host leg, `alfie` Ubuntu 26.04.1 x64)
 
+- [x] Full TUI suite on Linux (2026-09-22, repo-pinned toolchain 1.95.0): 5449 tests run; all green except 6 `ide_context::ipc::fetch_ide_context_*` socket tests that trip a deliberate security guard (`parent mode & 0o022`, rejects group-writable socket dirs) because alfie runs umask 002. Proven environmental: same 10 tests 10/10 pass with umask 022. Our diff touches none of that code. Build needed `OPENSSL_DIR/LIB_DIR/INCLUDE_DIR` (headers present, `pkg-config` missing) — no sudo required.
 - [ ] Windows → Ubuntu/Debian Remote SSH (remote execution, no local-path inference)
 - [ ] Local Windows + local Linux VSIX smoke
 - [ ] Tagged GitHub release + npm (same tested binaries)
