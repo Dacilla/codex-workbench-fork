@@ -11,4 +11,9 @@
   argument JSON from everyday history; transcript/expansion keep full details;
   `full` restores legacy rendering. Display-only: no execution/permission/context
   change. See `workbench/docs/cli-compact-mcp-changelog.md` for files, rationale,
-  and verification. (Track B extension work is listed separately when merged.)
+  and verification.
+- Track B M0/M3 (`feature/vscode-appserver`, commit `2a736df`): independent
+  graphical VS Code extension under `workbench/vscode/` (frontend-only VSIX,
+  workspace extension host, pinned-protocol App Server client). No `codex-rs/`
+  changes. See `workbench/docs/vscode-feature-matrix.md`,
+  `vscode-backend-discovery.md`, `vscode-manual-tests.md`.
