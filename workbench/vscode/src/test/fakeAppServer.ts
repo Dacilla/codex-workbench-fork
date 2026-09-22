@@ -9,6 +9,8 @@
  * - `--die-after-ms`: exit(1) after N ms (crash/reconnect tests).
  * - `--record`: append every approval *response received* as JSONL
  *   `{ id, result }` (exactly-once + fail-closed assertions).
+ * - `--record-turns`: append every `turn/start` *request params received* as
+ *   JSONL `{ id, params }` (model/effort override forwarding assertions).
  *
  * A turn whose text contains `[ask-approval]` triggers one
  * `item/commandExecution/requestApproval` server request and completes the
@@ -20,10 +22,11 @@ interface Args {
   hang: Set<string>;
   dieAfterMs: number;
   recordPath: string | null;
+  recordTurnsPath: string | null;
 }
 
 function parseArgs(): Args {
-  const args: Args = { hang: new Set(), dieAfterMs: 0, recordPath: null };
+  const args: Args = { hang: new Set(), dieAfterMs: 0, recordPath: null, recordTurnsPath: null };
   for (const raw of process.argv.slice(2)) {
     if (raw.startsWith("--hang=")) {
       args.hang.add(raw.slice("--hang=".length));
@@ -31,6 +34,8 @@ function parseArgs(): Args {
       args.dieAfterMs = Number(raw.slice("--die-after-ms=".length));
     } else if (raw.startsWith("--record=")) {
       args.recordPath = raw.slice("--record=".length);
+    } else if (raw.startsWith("--record-turns=")) {
+      args.recordTurnsPath = raw.slice("--record-turns=".length);
     }
   }
   return args;
@@ -47,6 +52,13 @@ function recordApprovalResponse(id: unknown, result: unknown): void {
     return;
   }
   fs.appendFileSync(args.recordPath, `${JSON.stringify({ id, result })}\n`);
+}
+
+function recordTurnStart(id: unknown, params: Record<string, unknown>): void {
+  if (args.recordTurnsPath === null) {
+    return;
+  }
+  fs.appendFileSync(args.recordTurnsPath, `${JSON.stringify({ id, params })}\n`);
 }
 
 let threadCounter = 0;
@@ -161,6 +173,7 @@ function handleRequest(id: unknown, method: string, params: Record<string, unkno
     }
     case "turn/start": {
       const threadId = String(params["threadId"] ?? "");
+      recordTurnStart(id, params);
       turnCounter += 1;
       const turnId = `turn-fake-${turnCounter}`;
       const input = Array.isArray(params["input"]) ? (params["input"] as Array<Record<string, unknown>>) : [];
@@ -182,7 +195,37 @@ function handleRequest(id: unknown, method: string, params: Record<string, unkno
       break;
     }
     case "model/list": {
-      send({ id, result: { data: [{ id: "fake-model", model: "fake-model", displayName: "Fake Model", description: "test only", hidden: false }] } });
+      send({
+        id,
+        result: {
+          data: [
+            {
+              id: "fake-model",
+              model: "fake-model",
+              displayName: "Fake Model",
+              description: "default test model",
+              hidden: false,
+              isDefault: true,
+              supportedReasoningEfforts: [
+                { reasoningEffort: "low", description: "fast test effort" },
+                { reasoningEffort: "medium", description: "balanced test effort" },
+                { reasoningEffort: "high", description: "careful test effort" },
+              ],
+              defaultReasoningEffort: "medium",
+            },
+            {
+              id: "fake-hidden",
+              model: "fake-hidden",
+              displayName: "Hidden Model",
+              description: "never offered by the picker",
+              hidden: true,
+              isDefault: false,
+              supportedReasoningEfforts: [],
+              defaultReasoningEffort: "low",
+            },
+          ],
+        },
+      });
       send({ method: "account/updated", params: { reason: "fake-test-broadcast" }, emittedAtMs: Date.now() });
       break;
     }

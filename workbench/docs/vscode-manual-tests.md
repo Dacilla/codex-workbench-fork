@@ -51,10 +51,40 @@ Requires authenticated `codex` (official fallback OK).
 (`code --install-extension`), repeat sections 1–2. Confirm no bundled
 binaries (`unzip -l`: only `package.json`, `out/`, `media/`, docs).
 
+## 5. Model + reasoning effort picker (new threads + per-thread pins)
+
+1. Open a chat tab with no prior selection → header reads
+   `… · model: default` (never "unknown").
+2. Command Palette → `Codex Workbench: Select Model` → QuickPick lists
+   `model/list` entries (display name + description, hidden skipped,
+   current + default marked) → pick one → header shows the display name.
+3. `Codex Workbench: Select Reasoning Effort` → options come from the
+   picked model's `supportedReasoningEfforts` with descriptions → header
+   appends `· effort: <value>`.
+4. Send a turn → `Show Logs` has no new warnings; the pin applies to this
+   turn and subsequent turns (protocol pin semantics).
+5. `New Chat in Editor Tab` → new thread inherits the last chosen
+   model/effort (header already shows them; first turn sends them).
+6. Close + restore the tab (window reload) → pins survive via persisted
+   panel bindings; header re-renders after re-resume.
+
+Live-tested vs not: override forwarding (params present when set, keys
+absent — never null — when unset), pin resolution/inheritance, `ext/model`
+reducer + header format, unknown-model rejection, and catalog-vs-fallback
+effort options are covered by `npm test` → "turn/start override
+forwarding", "ThreadRegistry model/effort overrides", "ext/model header
+state", "ModelCatalog" (fake transport over real stdio). NOT live-tested:
+real-backend `model/list` values, Extension Development Host rendering of
+the header/QuickPick, window-reload pin restore, and any billed model turn
+with a pin.
+
 ## Known gaps (not certifying)
 
 - Live model turns, live interactive approvals, real-backend concurrency
   (two simultaneous model turns) — automated only against the fake.
+- Model/effort picker against a real catalog, Extension Host rendering of
+  the header/QuickPick, window-reload pin restore — automated at the
+  transport/reducer/catalog level only (see section 5 above).
 - Account login flows and connected-apps parity — explicitly not claimed.
 - Webview ES-module loading inside VS Code — typechecked, not yet rendered
   in a live Extension Development Host.

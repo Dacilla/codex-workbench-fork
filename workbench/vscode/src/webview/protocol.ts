@@ -31,6 +31,7 @@ export const EXTENSION_MESSAGE_TYPES = [
   "ext/threads",
   "ext/error",
   "ext/connection",
+  "ext/model",
 ] as const;
 
 export type WebviewMessageType = (typeof WEBVIEW_MESSAGE_TYPES)[number];

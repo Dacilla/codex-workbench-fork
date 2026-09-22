@@ -42,7 +42,7 @@ describe("threadIdOf", () => {
 describe("ThreadRegistry", () => {
   it("unbinding a panel keeps the thread (close tab != delete thread)", () => {
     const registry = new ThreadRegistry(new InMemoryStorage());
-    registry.upsertThread({ threadId: "t-1", displayName: "chat", workspaceKey: "w", model: null, cwd: null, status: "idle", lastTurnId: null, updatedAtMs: 1 });
+    registry.upsertThread({ threadId: "t-1", displayName: "chat", workspaceKey: "w", model: null, effort: null, cwd: null, status: "idle", lastTurnId: null, updatedAtMs: 1 });
     registry.bindPanel("p-1", "t-1", "chat", "w");
     assert.equal(registry.unbindPanel("p-1"), "t-1");
     assert.ok(registry.getThread("t-1") !== undefined, "thread record survives panel close");
