@@ -21,6 +21,7 @@ import { ConnectGate } from "./sessions/ConnectGate";
 import { newPanelId } from "./sessions/ThreadRegistry";
 import { PanelRegistry } from "./sessions/PanelRegistry";
 import { SessionManager } from "./sessions/SessionManager";
+import { normalizeThreadItem } from "./webview/normalize";
 import { validateWebviewMessage } from "./webview/protocol";
 
 const VIEW_TYPE = "codexWorkbench.chat";
@@ -532,19 +533,31 @@ function routeToPanel(panelContext: PanelContext, method: string, params: unknow
     }
     case "item/started":
     case "item/completed": {
-      const item = (record["item"] ?? {}) as Record<string, unknown>;
+      const turnId = typeof record["turnId"] === "string" ? (record["turnId"] as string) : "";
+      const view = normalizeThreadItem(record["item"], turnId);
+      if (view === null) {
+        const raw = (record["item"] ?? {}) as Record<string, unknown>;
+        log(`dropped unrenderable item: ${method} type=${String(raw["type"] ?? "unknown")} id=${String(raw["id"] ?? "unknown")}`);
+        break;
+      }
       void panelContext.panel.webview.postMessage({
         type: "ext/item",
-        turnId: record["turnId"],
-        itemId: item["id"],
-        kind: item["type"],
-        text: item["text"] ?? itemSummary(item),
+        turnId: view.turnId,
+        itemId: view.id,
+        kind: view.kind,
+        text: view.detail !== undefined ? `${view.text}\n${view.detail}` : view.text,
       });
       break;
     }
     case "hydrated/item": {
-      const item = (record["item"] ?? {}) as Record<string, unknown>;
-      void panelContext.panel.webview.postMessage({ type: "ext/item", turnId: record["turnId"], itemId: item["id"], kind: item["type"], text: item["text"] ?? itemSummary(item) });
+      const turnId = typeof record["turnId"] === "string" ? (record["turnId"] as string) : "";
+      const view = normalizeThreadItem(record["item"], turnId);
+      if (view === null) {
+        const raw = (record["item"] ?? {}) as Record<string, unknown>;
+        log(`dropped unrenderable item: hydrated/item type=${String(raw["type"] ?? "unknown")} id=${String(raw["id"] ?? "unknown")}`);
+        break;
+      }
+      void panelContext.panel.webview.postMessage({ type: "ext/item", turnId: view.turnId, itemId: view.id, kind: view.kind, text: view.detail !== undefined ? `${view.text}\n${view.detail}` : view.text });
       break;
     }
     default: {
@@ -561,17 +574,6 @@ function routeToPanel(panelContext: PanelContext, method: string, params: unknow
       break;
     }
   }
-}
-
-function itemSummary(item: Record<string, unknown>): string {
-  const type = String(item["type"] ?? "item");
-  if (type === "commandExecution") {
-    return `command ${String(item["status"] ?? "")}`.trim();
-  }
-  if (type === "fileChange") {
-    return "file change";
-  }
-  return type;
 }
 
 function persistBindings(): void {

@@ -32,7 +32,7 @@ function toolLabel(kind: string): string {
       return "Edit";
     case "reasoning":
       return "Thinking";
-    case "mcpCall":
+    case "mcpToolCall":
       return "Tool";
     case "plan":
       return "Plan";
