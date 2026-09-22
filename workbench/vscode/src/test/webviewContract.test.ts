@@ -82,6 +82,20 @@ describe("conversation reducer", () => {
     assert.equal(state.approvals[0]?.settled, true);
     assert.equal(state.approvals[0]?.failClosed, true);
   });
+
+  it("tracks MCP status per server without timeline items", () => {
+    let state = initialState();
+    state = reduce(state, { type: "ext/mcpStatus", server: "docs", status: "starting", hasError: false });
+    state = reduce(state, { type: "ext/mcpStatus", server: "docs", status: "connected", hasError: false });
+    state = reduce(state, { type: "ext/mcpStatus", server: "other", status: "failed", hasError: true });
+    assert.deepEqual(state.mcp, {
+      docs: { status: "connected", hasError: false },
+      other: { status: "failed", hasError: true },
+    });
+    assert.equal(state.items.length, 0, "status updates never append timeline items");
+    state = reduce(state, { type: "ext/mcpStatus", server: "", status: "connected", hasError: false });
+    assert.equal(Object.keys(state.mcp).length, 2, "empty server names ignored");
+  });
 });
 
 describe("IDE helpers", () => {

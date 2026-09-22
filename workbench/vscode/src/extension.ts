@@ -500,6 +500,24 @@ function routeToPanel(panelContext: PanelContext, method: string, params: unknow
       });
       break;
     }
+    case "thread/started": {
+      // Lifecycle bookkeeping only; the thread is already known from the
+      // thread/start response. Never a timeline card.
+      log(`thread/started: ${typeof record["threadId"] === "string" ? (record["threadId"] as string) : "unknown"}`);
+      break;
+    }
+    case "mcpServer/startupStatus/updated": {
+      // One compact status segment per server (rendered in the header line),
+      // not one timeline card per update. Full detail goes to the log.
+      const server = typeof record["name"] === "string" ? (record["name"] as string) : "unknown";
+      const status = typeof record["status"] === "string" ? (record["status"] as string) : "unknown";
+      const detail = typeof record["error"] === "string" && (record["error"] as string).length > 0
+        ? `: ${(record["error"] as string).slice(0, 300)}`
+        : "";
+      log(`mcp startup: ${server} -> ${status}${detail}`);
+      void panelContext.panel.webview.postMessage({ type: "ext/mcpStatus", server, status, hasError: detail !== "" });
+      break;
+    }
     case "turn/started": {
       const turn = (record["turn"] ?? {}) as Record<string, unknown>;
       panelContext.activeTurnId = typeof turn["id"] === "string" ? (turn["id"] as string) : null;
@@ -530,8 +548,16 @@ function routeToPanel(panelContext: PanelContext, method: string, params: unknow
       break;
     }
     default: {
-      // Forward anything else as a compact activity line; never raw-dump.
-      void panelContext.panel.webview.postMessage({ type: "ext/item", turnId: record["turnId"] ?? "unknown", itemId: `${method}-${Date.now()}`, kind: "activity", text: method });
+      // Unknown/background notifications stay out of the timeline; the method
+      // name and a bounded params preview go to the output channel instead.
+      // Rendering every new lifecycle method as a card flooded the view.
+      let preview = "";
+      try {
+        preview = JSON.stringify(record ?? null) ?? "";
+      } catch {
+        preview = "";
+      }
+      log(`unrendered notification: ${method}${preview.length > 0 ? ` ${preview.slice(0, 300)}` : ""}`);
       break;
     }
   }
