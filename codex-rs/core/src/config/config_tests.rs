@@ -62,9 +62,9 @@ use codex_config::types::ResumeCwdMode;
 use codex_config::types::SandboxWorkspaceWrite;
 use codex_config::types::SessionPickerViewMode;
 use codex_config::types::SkillsConfig;
+use codex_config::types::ToolCallDisplay;
 use codex_config::types::ToolSuggestDisabledTool;
 use codex_config::types::ToolSuggestDiscoverableType;
-use codex_config::types::ToolCallDisplay;
 use codex_config::types::Tui;
 use codex_config::types::TuiKeymap;
 use codex_config::types::TuiNotificationSettings;
@@ -1373,12 +1373,17 @@ async fn runtime_config_uses_tui_tool_call_display() {
     for (toml, expected) in [
         ("", ToolCallDisplay::Compact),
         ("[tui]", ToolCallDisplay::Compact),
-        ("[tui]\ntool_call_display = \"compact\"", ToolCallDisplay::Compact),
-        ("[tui]\ntool_call_display = \"preview\"", ToolCallDisplay::Preview),
+        (
+            "[tui]\ntool_call_display = \"compact\"",
+            ToolCallDisplay::Compact,
+        ),
+        (
+            "[tui]\ntool_call_display = \"preview\"",
+            ToolCallDisplay::Preview,
+        ),
         ("[tui]\ntool_call_display = \"full\"", ToolCallDisplay::Full),
     ] {
-        let cfg_toml: ConfigToml =
-            toml::from_str(toml).expect("deserialize tool_call_display");
+        let cfg_toml: ConfigToml = toml::from_str(toml).expect("deserialize tool_call_display");
         let cfg = Config::load_from_base_config_with_overrides(
             cfg_toml,
             ConfigOverrides::default(),

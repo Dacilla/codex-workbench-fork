@@ -1,0 +1,25 @@
+{
+  "name": "@YOUR_SCOPE/codex-workbench",
+  "version": "0.1.0",
+  "description": "Codex Workbench CLI: upstream-based Codex terminal with compact MCP display. Runs side-by-side with official codex.",
+  "license": "Apache-2.0",
+  "bin": {
+    "codex-workbench": "bin/codex-workbench.js"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/codex-workbench.js"
+  ],
+  "optionalDependencies": {
+    "@YOUR_SCOPE/codex-workbench-win32-x64": "0.1.0",
+    "@YOUR_SCOPE/codex-workbench-linux-x64": "0.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dacilla/codex-workbench-fork.git",
+    "directory": "workbench/packaging/npm"
+  }
+}

@@ -6,11 +6,11 @@
 //! summary. Execution data is never transformed, only its display.
 
 use super::*;
+use crate::test_support::PathBufExt;
 use codex_app_server_protocol::McpToolCallResult;
 use codex_app_server_protocol::McpToolCallStatus;
 use codex_app_server_protocol::ThreadItem;
 use codex_protocol::mcp::CallToolResult;
-use crate::test_support::PathBufExt;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 
@@ -31,7 +31,10 @@ fn text_result(text: &str) -> CallToolResult {
     }
 }
 
-fn completed_cell(display: ToolCallDisplay, arguments: Option<serde_json::Value>) -> McpToolCallCell {
+fn completed_cell(
+    display: ToolCallDisplay,
+    arguments: Option<serde_json::Value>,
+) -> McpToolCallCell {
     let mut cell = new_active_mcp_tool_call(
         "call-policy".into(),
         invocation(arguments),
@@ -248,10 +251,7 @@ fn compact_and_preview_never_emit_payloads_across_widths() {
 #[test]
 fn transcript_and_expansion_keep_full_details_on_purpose() {
     let secret = "intentional-details-secret";
-    let cell = completed_cell(
-        ToolCallDisplay::Compact,
-        Some(json!({"body": secret})),
-    );
+    let cell = completed_cell(ToolCallDisplay::Compact, Some(json!({"body": secret})));
     let transcript = cell
         .transcript_lines(/*width*/ 80)
         .iter()
@@ -287,9 +287,7 @@ fn large_payload_stays_compact_and_bit_identical() {
         } else {
             assert!(lines.len() <= 4, "compact stays small: {lines:?}");
         }
-        assert!(
-            !lines.join("\n").contains("sensitive") || display == ToolCallDisplay::Full
-        );
+        assert!(!lines.join("\n").contains("sensitive") || display == ToolCallDisplay::Full);
         // Rendering is pure: the retained arguments are untouched.
         assert_eq!(
             serde_json::to_string(
@@ -333,9 +331,8 @@ fn replay_preserves_arguments_and_renders_compact() {
     let args = json!({"body": secret, "pageId": 1});
     let before = serde_json::to_string(&args).expect("serialize args");
 
-    let history =
-        crate::thread_transcript::tools::McpHistory::from_item(replay_item(args.clone()))
-            .expect("replay history");
+    let history = crate::thread_transcript::tools::McpHistory::from_item(replay_item(args.clone()))
+        .expect("replay history");
     let cell = history.into_cell(ToolCallDisplay::Compact);
     assert_eq!(
         serde_json::to_string(cell.invocation.arguments.as_ref().expect("args"))
@@ -351,7 +348,7 @@ fn replay_preserves_arguments_and_renders_compact() {
     let replayed = crate::thread_transcript::thread_items_to_transcript_cells(
         /*thread_id*/ None,
         &cwd,
-        [replay_item(args.clone())],
+        [replay_item(args)],
         crate::thread_transcript::RawReasoningVisibility::Hidden,
         /*config*/ None,
     );
