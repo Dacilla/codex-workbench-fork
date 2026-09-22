@@ -65,6 +65,14 @@
       {
         "command": "codexWorkbench.attachSelection",
         "title": "Codex Workbench: Attach Selection as Context"
+      },
+      {
+        "command": "codexWorkbench.selectModel",
+        "title": "Codex Workbench: Select Model"
+      },
+      {
+        "command": "codexWorkbench.selectEffort",
+        "title": "Codex Workbench: Select Reasoning Effort"
       }
     ],
     "configuration": {
@@ -96,6 +104,8 @@
     "onCommand:codexWorkbench.resumeChat",
     "onCommand:codexWorkbench.reconnectBackend",
     "onCommand:codexWorkbench.showLogs",
+    "onCommand:codexWorkbench.selectModel",
+    "onCommand:codexWorkbench.selectEffort",
     "onWebviewPanel:codexWorkbench.chat"
   ],
   "devDependencies": {

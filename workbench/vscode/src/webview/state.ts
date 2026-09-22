@@ -35,10 +35,20 @@ export interface ConversationState {
   droppedEvents: number;
   /** Compact per-server MCP status (update-in-place, never timeline cards). */
   mcp: Record<string, { status: string; hasError: boolean }>;
+  /**
+   * Effective model for the next turn: the user-pinned id when set, else the
+   * backend-reported thread model. Null = backend default (header shows
+   * "default", never "unknown").
+   */
+  model: string | null;
+  /** Effective reasoning effort for the next turn; null = backend default. */
+  effort: string | null;
+  /** Catalog display name for `model` where known; null = show the raw id. */
+  modelLabel: string | null;
 }
 
 export function initialState(): ConversationState {
-  return { items: [], approvals: [], turnStatus: "idle", activeTurnId: null, connection: "connecting", error: null, droppedEvents: 0, mcp: {} };
+  return { items: [], approvals: [], turnStatus: "idle", activeTurnId: null, connection: "connecting", error: null, droppedEvents: 0, mcp: {}, model: null, effort: null, modelLabel: null };
 }
 
 export type ExtensionEvent =
@@ -50,7 +60,8 @@ export type ExtensionEvent =
   | { type: "ext/approvalSettled"; requestId: string | number; approved: boolean; failClosed: boolean }
   | { type: "ext/error"; message: string }
   | { type: "ext/connection"; state: string; detail: string; droppedEvents?: number }
-  | { type: "ext/mcpStatus"; server: string; status: string; hasError: boolean };
+  | { type: "ext/mcpStatus"; server: string; status: string; hasError: boolean }
+  | { type: "ext/model"; model: string | null; effort: string | null; displayName: string | null };
 
 const MAX_ITEMS = 2000;
 const MAX_TEXT_PER_ITEM = 256 * 1024;
@@ -135,10 +146,31 @@ export function reduce(state: ConversationState, event: ExtensionEvent): Convers
       mcp[server] = { status, hasError: event.hasError };
       return { ...state, mcp };
     }
+    case "ext/model": {
+      // Bounded like mcpStatus: a pathological backend must not grow state.
+      const model = event.model !== null && event.model.length > 0 ? event.model.slice(0, 200) : null;
+      const effort = event.effort !== null && event.effort.length > 0 ? event.effort.slice(0, 100) : null;
+      const displayName = event.displayName !== null && event.displayName.length > 0 ? event.displayName.slice(0, 200) : null;
+      return { ...state, model, effort, modelLabel: displayName };
+    }
     default: {
       return state;
     }
   }
+}
+
+/**
+ * Header segment for the model/effort line. Shows the catalog display name
+ * where known, else the raw model id, else the honest backend default.
+ * Never renders "unknown": an unset model is the backend default, not a
+ * missing value. Rendered via textContent only (no HTML).
+ */
+export function formatModelSegment(model: string | null, effort: string | null, displayName: string | null): string {
+  if (model === null && effort === null) {
+    return " · model: default";
+  }
+  const label = displayName ?? model ?? "default";
+  return ` · model: ${label}${effort !== null ? ` · effort: ${effort}` : ""}`;
 }
 
 function isCollapsibleKind(kind: string): boolean {

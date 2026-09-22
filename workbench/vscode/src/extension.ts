@@ -18,7 +18,10 @@ import { diffCandidateFor } from "./ide/DiffProvider";
 import { referenceFromEditorContext, renderReferenceAsMention } from "./ide/UriContext";
 import type { EventRouter, ThreadSink } from "./sessions/EventRouter";
 import { ConnectGate } from "./sessions/ConnectGate";
+import { displayLabelFor, effortOptionsFor, findModel, parseModelList, validateModelChoice, visibleModels, defaultModel } from "./sessions/ModelCatalog";
+import type { ModelEntry } from "./sessions/ModelCatalog";
 import { newPanelId } from "./sessions/ThreadRegistry";
+import type { PersistedPanelBinding } from "./sessions/ThreadRegistry";
 import { PanelRegistry } from "./sessions/PanelRegistry";
 import { SessionManager } from "./sessions/SessionManager";
 import { normalizeThreadItem } from "./webview/normalize";
@@ -44,6 +47,12 @@ let panels: PanelRegistry | null = null;
 const livePanels = new Map<string, PanelContext>();
 let outputChannel: vscode.OutputChannel | null = null;
 let extensionContext: vscode.ExtensionContext | null = null;
+/**
+ * Last successfully fetched model catalog (id → display name resolution for
+ * the header). Refreshed on every model/list call the picker makes; empty
+ * until the first fetch, in which case the header shows raw model ids.
+ */
+let modelCatalog: ModelEntry[] = [];
 
 export function activate(context: vscode.ExtensionContext): void {
   extensionContext = context;
@@ -89,6 +98,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("codexWorkbench.reconnectBackend", () => void reconnect()),
     vscode.commands.registerCommand("codexWorkbench.showLogs", () => outputChannel?.show()),
     vscode.commands.registerCommand("codexWorkbench.attachSelection", () => void attachSelection()),
+    vscode.commands.registerCommand("codexWorkbench.selectModel", () => void selectModel()),
+    vscode.commands.registerCommand("codexWorkbench.selectEffort", () => void selectEffort()),
     vscode.window.registerWebviewPanelSerializer(VIEW_TYPE, {
       deserializeWebviewPanel: (restored, state) => restorePanel(restored, state as { panelId: string; threadId: string } | undefined),
     }),
@@ -183,6 +194,7 @@ async function reconnect(): Promise<void> {
         await manager.resumeThread(panelContext.threadId);
         subscribePanel(panelContext);
         await hydratePanel(panelContext);
+        postModelState(panelContext);
         void panelContext.panel.webview.postMessage({ type: "ext/connection", state: "ready", detail: "reconnected; in-flight turns were interrupted" });
       } catch (error) {
         void panelContext.panel.webview.postMessage({ type: "ext/error", message: `resume failed: ${error instanceof Error ? error.message : String(error)}` });
@@ -252,7 +264,17 @@ async function createChatPanel(
   }
   try {
     const approvalPolicy = config<string>(APPROVAL_POLICY_KEY) ?? "on-request";
-    const result = (await manager.startThread({ cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, approvalPolicy })) as Record<string, unknown>;
+    // New threads inherit the last explicitly chosen model as their
+    // thread/start default (inherit-and-send: the same pin also rides every
+    // turn/start via composer/send). Effort has no thread/start slot, so it
+    // is carried by turn/start pins only. Nothing is sent until the user
+    // picks via Select Model / Select Reasoning Effort.
+    const inherited = manager.threads.lastChosenOverride();
+    const result = (await manager.startThread({
+      cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+      approvalPolicy,
+      ...(inherited.model !== null ? { model: inherited.model } : {}),
+    })) as Record<string, unknown>;
     const thread = (result["thread"] ?? {}) as Record<string, unknown>;
     const threadId = thread["id"] as string;
     panelContext.threadId = threadId;
@@ -260,6 +282,7 @@ async function createChatPanel(
     subscribePanel(panelContext);
     panel.webview.html = renderHtml(panel.webview, panelId, threadId, "");
     void panel.webview.postMessage({ type: "ext/connection", state: "ready", detail: "thread started" });
+    postModelState(panelContext);
   } catch (error) {
     void panel.webview.postMessage({ type: "ext/error", message: `thread/start failed: ${error instanceof Error ? error.message : String(error)}` });
   }
@@ -328,6 +351,7 @@ async function pickAndResume(): Promise<void> {
     subscribePanel(newest);
     newest.panel.webview.html = renderHtml(newest.panel.webview, newest.panelId, threadId, "");
     await hydratePanel(newest);
+    postModelState(newest);
   } catch (error) {
     void newest.panel.webview.postMessage({ type: "ext/error", message: `thread/resume failed: ${error instanceof Error ? error.message : String(error)}` });
   }
@@ -344,6 +368,178 @@ async function renameActiveTab(): Promise<void> {
     entry.panel.title = name;
     persistBindings();
   }
+}
+
+/**
+ * The panel model/effort commands act on: the visible chat tab, or the only
+ * live panel when exactly one exists. Otherwise the choice would silently
+ * hit the wrong thread, so the command errors and asks for a focused tab.
+ */
+function activePanel(): PanelContext | undefined {
+  const visible = [...livePanels.values()].find((panelContext) => panelContext.panel.visible);
+  if (visible !== undefined) {
+    return visible;
+  }
+  return livePanels.size === 1 ? [...livePanels.values()][0] : undefined;
+}
+
+/**
+ * Post the effective model/effort header state for a panel: user pins first,
+ * then the backend-reported thread values, then the honest backend default
+ * (nulls — the header renders "default", never "unknown"). Display names
+ * come from the last model/list fetch; raw ids are shown until one exists.
+ */
+function postModelState(panelContext: PanelContext): void {
+  if (manager === null) {
+    return;
+  }
+  const threadId = panelContext.threadId;
+  const record = threadId !== null ? manager.threads.getThread(threadId) : undefined;
+  const pins = threadId !== null ? manager.threads.effectiveOverride(threadId) : manager.threads.lastChosenOverride();
+  const model = pins.model ?? record?.model ?? null;
+  const effort = pins.effort ?? record?.effort ?? null;
+  const displayName = model !== null ? displayLabelFor(modelCatalog, model) : null;
+  void panelContext.panel.webview.postMessage({ type: "ext/model", model, effort, displayName });
+}
+
+/** Re-apply persisted pins after a reload (serializer restore path). */
+function restoreThreadPins(threadId: string): void {
+  if (extensionContext === null || manager === null) {
+    return;
+  }
+  const stored = extensionContext.workspaceState.get<PersistedPanelBinding[]>(STORAGE_KEY) ?? [];
+  const binding = stored.find((entry) => entry.threadId === threadId);
+  if (binding === undefined) {
+    return;
+  }
+  const patch: { model?: string; effort?: string } = {};
+  if (typeof binding.model === "string" && binding.model.length > 0) {
+    patch.model = binding.model;
+  }
+  if (typeof binding.effort === "string" && binding.effort.length > 0) {
+    patch.effort = binding.effort;
+  }
+  if (patch.model !== undefined || patch.effort !== undefined) {
+    manager.threads.setThreadOverride(threadId, patch);
+  }
+}
+
+/** Host-side model picker: QuickPick over model/list, no webview messages. */
+async function selectModel(): Promise<void> {
+  if (manager === null) {
+    return;
+  }
+  const panelContext = activePanel();
+  if (panelContext === undefined) {
+    void vscode.window.showErrorMessage("Codex Workbench: focus a chat tab first, then pick a model.");
+    return;
+  }
+  if (!(await ensureConnected(false)) || manager === null) {
+    return;
+  }
+  let entries: ModelEntry[];
+  try {
+    entries = parseModelList(await manager.listModels());
+  } catch (error) {
+    void vscode.window.showErrorMessage(`Codex Workbench: model/list failed: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  if (entries.length === 0) {
+    void vscode.window.showErrorMessage("Codex Workbench: model/list returned no models.");
+    return;
+  }
+  modelCatalog = entries;
+  const visible = visibleModels(entries);
+  if (visible.length === 0) {
+    void vscode.window.showErrorMessage("Codex Workbench: every catalog model is hidden; nothing to pick.");
+    return;
+  }
+  const threadId = panelContext.threadId;
+  const effective = threadId !== null ? manager.threads.effectiveOverride(threadId) : manager.threads.lastChosenOverride();
+  const record = threadId !== null ? manager.threads.getThread(threadId) : undefined;
+  const currentId = effective.model ?? record?.model ?? defaultModel(entries)?.id ?? null;
+  const items = visible.map((entry) => ({
+    label: `${entry.displayName}${entry.id === currentId ? " (current)" : ""}${entry.isDefault ? " (default)" : ""}`,
+    detail: entry.description,
+    id: entry.id,
+  }));
+  const picked = await vscode.window.showQuickPick(items, { placeHolder: "Select model for this thread (applies to this turn and subsequent turns)" });
+  if (picked === undefined) {
+    return;
+  }
+  // Unreachable via the picker itself (ids come from the list), but a
+  // defense-in-depth check: never pin an id the backend did not advertise.
+  const check = validateModelChoice(entries, picked.id);
+  if (!check.ok) {
+    void vscode.window.showErrorMessage(`Codex Workbench: ${check.error}`);
+    return;
+  }
+  if (threadId !== null) {
+    manager.threads.setThreadOverride(threadId, { model: check.entry.id });
+  } else {
+    manager.threads.rememberChoice({ model: check.entry.id });
+  }
+  log(`model selected: ${check.entry.id} thread=${threadId ?? "(none yet)"}`);
+  postModelState(panelContext);
+  persistBindings();
+}
+
+/** Host-side effort picker: per-model catalog options, static fallback otherwise. */
+async function selectEffort(): Promise<void> {
+  if (manager === null) {
+    return;
+  }
+  const panelContext = activePanel();
+  if (panelContext === undefined) {
+    void vscode.window.showErrorMessage("Codex Workbench: focus a chat tab first, then pick a reasoning effort.");
+    return;
+  }
+  if (!(await ensureConnected(false)) || manager === null) {
+    return;
+  }
+  let entries: ModelEntry[] = [];
+  try {
+    entries = parseModelList(await manager.listModels());
+    modelCatalog = entries;
+  } catch (error) {
+    // A failed list lacks every model, so the static fallback applies;
+    // the effort pin is still valid on the wire. Logged, not hidden.
+    log(`model/list failed during effort pick, using static fallback: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const threadId = panelContext.threadId;
+  const effective = threadId !== null ? manager.threads.effectiveOverride(threadId) : manager.threads.lastChosenOverride();
+  const record = threadId !== null ? manager.threads.getThread(threadId) : undefined;
+  const currentModelId = effective.model ?? record?.model ?? defaultModel(entries)?.id ?? null;
+  const currentModel = currentModelId !== null ? findModel(entries, currentModelId) : undefined;
+  if (currentModel !== undefined && currentModel.efforts.length === 0) {
+    void vscode.window.showErrorMessage(`Codex Workbench: model "${currentModelId}" advertises no reasoning effort options.`);
+    return;
+  }
+  const { options, fromFallback } = effortOptionsFor(entries, currentModelId);
+  const currentEffort = effective.effort ?? record?.effort ?? null;
+  const modelDefault = currentModel?.defaultEffort ?? null;
+  const modelLabel = currentModelId !== null ? (displayLabelFor(entries, currentModelId) ?? currentModelId) : "default model";
+  const items = options.map((option) => ({
+    label: `${option.effort}${option.effort === currentEffort ? " (current)" : ""}${option.effort === modelDefault ? " (model default)" : ""}`,
+    detail: option.description,
+    id: option.effort,
+  }));
+  const picked = await vscode.window.showQuickPick(items, {
+    placeHolder: fromFallback
+      ? `Select reasoning effort (catalog unavailable — static fallback, thread model unknown)`
+      : `Select reasoning effort for ${modelLabel}`,
+  });
+  if (picked === undefined) {
+    return;
+  }
+  if (threadId !== null) {
+    manager.threads.setThreadOverride(threadId, { effort: picked.id });
+  } else {
+    manager.threads.rememberChoice({ effort: picked.id });
+  }
+  log(`effort selected: ${picked.id} thread=${threadId ?? "(none yet)"}${fromFallback ? " (static fallback)" : ""}`);
+  postModelState(panelContext);
+  persistBindings();
 }
 
 async function attachSelection(): Promise<void> {
@@ -387,9 +583,11 @@ async function restorePanel(restored: vscode.WebviewPanel, state: { panelId: str
   });
   if (await ensureConnected(true) && manager !== null && panelContext.threadId !== null) {
     try {
+      restoreThreadPins(panelContext.threadId);
       await manager.resumeThread(panelContext.threadId);
       subscribePanel(panelContext);
       await hydratePanel(panelContext);
+      postModelState(panelContext);
     } catch (error) {
       void restored.webview.postMessage({ type: "ext/error", message: `restore failed: ${error instanceof Error ? error.message : String(error)}` });
     }
@@ -415,6 +613,9 @@ async function handleWebviewMessage(panelContext: PanelContext, type: string, pa
   switch (type) {
     case "webview/ready":
       void panelContext.panel.webview.postMessage({ type: "ext/mentions", mentions: panelContext.mentions });
+      // The webview is recreated whenever a hidden tab is reshown
+      // (retainContextWhenHidden: false), so re-send header state here.
+      postModelState(panelContext);
       break;
     case "composer/send": {
       if (panelContext.threadId === null) {
@@ -425,7 +626,11 @@ async function handleWebviewMessage(panelContext: PanelContext, type: string, pa
       const fullText = mentions.length > 0 ? `${mentions.join(" ")}\n${text}` : text;
       void panelContext.panel.webview.postMessage({ type: "ext/item", turnId: "local", itemId: `local-${Date.now()}`, kind: "userMessage", text });
       try {
-        const response = (await manager.startTurn(panelContext.threadId, fullText)) as Record<string, unknown>;
+        // Apply this thread's stored model/effort pins (inherited defaults
+        // included). Absent pins are omitted from the params — never null —
+        // so the backend thread default applies untouched.
+        const overrides = manager.threads.overrideParams(panelContext.threadId);
+        const response = (await manager.startTurn(panelContext.threadId, fullText, { ...overrides })) as Record<string, unknown>;
         const turn = (response["turn"] ?? {}) as Record<string, unknown>;
         panelContext.activeTurnId = typeof turn["id"] === "string" ? (turn["id"] as string) : null;
       } catch (error) {
@@ -584,12 +789,17 @@ function persistBindings(): void {
     .filter((panelContext) => panelContext.threadId !== null)
     .map((panelContext) => {
       const existing = manager?.threads.bindingForPanel(panelContext.panelId);
+      // Persist pins alongside the draft so a reload restores them
+      // (restoreThreadPins). overrideParams omits unset keys, so untouched
+      // threads persist no model/effort and keep the backend default.
+      const pins = panelContext.threadId !== null ? (manager?.threads.overrideParams(panelContext.threadId) ?? {}) : {};
       return {
         panelId: panelContext.panelId,
         threadId: panelContext.threadId as string,
         displayName: panelContext.panel.title,
         workspaceKey: workspaceKey(),
         draft: existing?.draft ?? "",
+        ...pins,
       };
     });
   void extensionContext.workspaceState.update(STORAGE_KEY, bindings);

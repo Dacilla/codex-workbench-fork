@@ -79,6 +79,13 @@ LIVE-FAKE.
 ## Models / account (LIVE-OFFICIAL read-only)
 
 - `model/list` `{}` → `{data: [{id, model, displayName, …, supportedReasoningEfforts}]}` (LIVE-OFFICIAL).
+- Extension model/effort picker (`codexWorkbench.selectModel`,
+  `codexWorkbench.selectEffort`): per-thread pins forwarded on `turn/start`
+  only when set (keys absent otherwise), inherited by new threads,
+  `ext/model` header segment (`model: <displayName|id|default>[ · effort]`,
+  never "unknown") — LIVE-FAKE (fake catalog over real stdio) for
+  forwarding/inheritance/reducer/validation; real-catalog values + Host
+  rendering UNTESTED (manual steps in `vscode-manual-tests.md` §5).
 - `getAuthStatus` `{includeToken, refreshToken}` → `{authMethod: "chatgpt", authToken: null, requiresOpenaiAuth: true}` (LIVE-OFFICIAL, token not requested).
 - `modelProvider/capabilities/read` → `{namespaceTools, imageGeneration, webSearch}` (LIVE-OFFICIAL).
 - `account/login/*`, `account/logout`, connected Codex Apps / hosted

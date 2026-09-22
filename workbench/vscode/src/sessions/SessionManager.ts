@@ -37,6 +37,16 @@ export interface TurnOptions {
   cwd?: string;
   signal?: AbortSignal;
   timeoutMs?: number;
+  /**
+   * Override the model for this turn and subsequent turns (protocol pins
+   * the thread). Forwarded only when set — never as null.
+   */
+  model?: string;
+  /**
+   * Override the reasoning effort for this turn and subsequent turns
+   * (protocol pins the thread). Forwarded only when set — never as null.
+   */
+  effort?: string;
 }
 
 export class SessionManager {
@@ -167,6 +177,7 @@ export class SessionManager {
         displayName: typeof thread["name"] === "string" ? (thread["name"] as string) : (thread["id"] as string),
         workspaceKey: "",
         model: typeof result["model"] === "string" ? (result["model"] as string) : null,
+        effort: typeof result["reasoningEffort"] === "string" ? (result["reasoningEffort"] as string) : null,
         cwd: typeof result["cwd"] === "string" ? (result["cwd"] as string) : null,
         status: "idle",
         lastTurnId: null,
@@ -187,6 +198,24 @@ export class SessionManager {
       params["cwd"] = options.cwd;
     }
     const result = (await transport.request("thread/resume", params)) as Record<string, unknown>;
+    // Refresh the backend-known model/effort so the header stays truthful
+    // across resume. Preserves the local display name / workspace binding and
+    // never touches user pins (those live in the override map).
+    const thread = (result["thread"] ?? {}) as Record<string, unknown>;
+    if (typeof thread["id"] === "string") {
+      const existing = this.threads.getThread(thread["id"] as string);
+      this.threads.upsertThread({
+        threadId: thread["id"] as string,
+        displayName: existing?.displayName ?? (typeof thread["name"] === "string" ? (thread["name"] as string) : (thread["id"] as string)),
+        workspaceKey: existing?.workspaceKey ?? "",
+        model: typeof result["model"] === "string" ? (result["model"] as string) : (existing?.model ?? null),
+        effort: typeof result["reasoningEffort"] === "string" ? (result["reasoningEffort"] as string) : (existing?.effort ?? null),
+        cwd: typeof result["cwd"] === "string" ? (result["cwd"] as string) : (existing?.cwd ?? null),
+        status: existing?.status ?? "idle",
+        lastTurnId: existing?.lastTurnId ?? null,
+        updatedAtMs: Date.now(),
+      });
+    }
     return result;
   }
 
@@ -210,6 +239,15 @@ export class SessionManager {
     };
     if (options.cwd !== undefined) {
       params["cwd"] = options.cwd;
+    }
+    // Overrides are forwarded only when explicitly set. The backend treats a
+    // present model/effort as a pin for this turn and subsequent turns; an
+    // absent key preserves the thread default. Nulls are never sent.
+    if (options.model !== undefined && options.model.length > 0) {
+      params["model"] = options.model;
+    }
+    if (options.effort !== undefined && options.effort.length > 0) {
+      params["effort"] = options.effort;
     }
     return (await transport.request("turn/start", params, { signal: options.signal, timeoutMs: options.timeoutMs ?? 0 })) as Record<string, unknown>;
   }

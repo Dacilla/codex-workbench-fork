@@ -15,17 +15,36 @@ export interface PersistedPanelBinding {
   /** remote authority + workspace URI, so local threads never resume remote. */
   workspaceKey: string;
   draft?: string;
+  /**
+   * Explicitly chosen model/effort pins, restored into the override map on
+   * reload (see restorePanel). Absent = never chosen; the backend default
+   * applies. Written by persistBindings alongside the draft.
+   */
+  model?: string;
+  effort?: string;
 }
 
 export interface ThreadRecord {
   threadId: string;
   displayName: string;
   workspaceKey: string;
+  /** Backend-reported thread model (from thread/start|resume), not a user pin. */
   model: string | null;
+  /** Backend-reported reasoning effort, when the backend reports one. */
+  effort: string | null;
   cwd: string | null;
   status: string | null;
   lastTurnId: string | null;
   updatedAtMs: number;
+}
+
+/**
+ * Explicit user-chosen model/effort pins. Null = no pin; the backend thread
+ * default (or the inherited last-chosen value) applies.
+ */
+export interface ThreadModelOverride {
+  model: string | null;
+  effort: string | null;
 }
 
 export interface RegistryStorage {
@@ -53,6 +72,19 @@ export class ThreadRegistry {
   private readonly threads = new Map<string, ThreadRecord>();
   private readonly panelToThread = new Map<string, string>();
   private bindings: PersistedPanelBinding[];
+  /**
+   * Per-thread user pins, keyed by thread id. Separate from ThreadRecord so
+   * a pin survives even when no backend record exists yet (e.g. a resumed
+   * thread that was never upserted this session).
+   */
+  private readonly overrides = new Map<string, ThreadModelOverride>();
+  /**
+   * Last explicitly chosen values, session-scoped. New threads inherit these
+   * as picker defaults AND as sent overrides (inherit-and-send; see
+   * effectiveOverride). Never populated from backend echoes — only from
+   * explicit user selection — so "unset" stays honest.
+   */
+  private lastChosen: ThreadModelOverride = { model: null, effort: null };
 
   constructor(private readonly storage: RegistryStorage = new InMemoryStorage()) {
     this.bindings = storage.readBindings();
@@ -67,6 +99,71 @@ export class ThreadRegistry {
 
   getThread(threadId: string): ThreadRecord | undefined {
     return this.threads.get(threadId);
+  }
+
+  /**
+   * Record an explicit user pin for a thread. Merges with the existing pin;
+   * only keys present in `patch` change. Explicit non-null values also become
+   * the session-scoped last-chosen defaults inherited by new threads.
+   * Returns the effective override after the update.
+   */
+  setThreadOverride(threadId: string, patch: { model?: string | null; effort?: string | null }): ThreadModelOverride {
+    const current = this.overrides.get(threadId) ?? { model: null, effort: null };
+    const next: ThreadModelOverride = {
+      model: patch.model !== undefined ? patch.model : current.model,
+      effort: patch.effort !== undefined ? patch.effort : current.effort,
+    };
+    this.overrides.set(threadId, next);
+    this.rememberChoice(patch);
+    return this.effectiveOverride(threadId);
+  }
+
+  /**
+   * Record an explicit choice with no thread attached yet (e.g. picking a
+   * model before any thread exists). Becomes the inherited default.
+   */
+  rememberChoice(patch: { model?: string | null; effort?: string | null }): void {
+    if (patch.model !== undefined && patch.model !== null) {
+      this.lastChosen.model = patch.model;
+    }
+    if (patch.effort !== undefined && patch.effort !== null) {
+      this.lastChosen.effort = patch.effort;
+    }
+  }
+
+  /** Session-scoped last explicitly chosen values (a copy). */
+  lastChosenOverride(): ThreadModelOverride {
+    return { ...this.lastChosen };
+  }
+
+  /**
+   * The overrides to send for a thread: its own pins, falling back to the
+   * last explicitly chosen values (new threads inherit-and-send). Nulls mean
+   * "unset" — callers must omit them from the wire params, never send null.
+   */
+  effectiveOverride(threadId: string): ThreadModelOverride {
+    const own = this.overrides.get(threadId);
+    return {
+      model: own?.model ?? this.lastChosen.model,
+      effort: own?.effort ?? this.lastChosen.effort,
+    };
+  }
+
+  /**
+   * Wire/persist-ready form of the effective override: only non-null entries,
+   * so spreading this into turn/start params or panel bindings can never
+   * emit a null. Returns {} when nothing was ever chosen.
+   */
+  overrideParams(threadId: string): { model?: string; effort?: string } {
+    const effective = this.effectiveOverride(threadId);
+    const params: { model?: string; effort?: string } = {};
+    if (effective.model !== null) {
+      params.model = effective.model;
+    }
+    if (effective.effort !== null) {
+      params.effort = effective.effort;
+    }
+    return params;
   }
 
   bindPanel(panelId: string, threadId: string, displayName: string, workspaceKey: string): void {
