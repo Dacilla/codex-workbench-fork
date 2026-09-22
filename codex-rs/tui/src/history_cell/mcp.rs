@@ -14,6 +14,9 @@ mod result;
 #[path = "mcp_preview.rs"]
 mod preview;
 
+#[path = "mcp_display_policy.rs"]
+mod display_policy;
+
 #[path = "computer_activity.rs"]
 mod computer_activity;
 pub(crate) use computer_activity::ComputerActivityCell;
@@ -29,6 +32,10 @@ use crate::terminal_hyperlinks::remap_source_wrapped_line;
 use crate::text_formatting::format_json_compact;
 use crate::tool_output::ToolOutputPreview;
 use codex_app_server_protocol::McpServerConnectionStatus;
+use codex_config::types::ToolCallDisplay;
+use display_policy::compact_invocation_text;
+use display_policy::preview_args_summary;
+use display_policy::status_suffix;
 use result::McpContentBlock;
 use result::McpResultKind;
 use result::McpToolResult;
@@ -37,6 +44,10 @@ use std::borrow::Cow;
 #[cfg(test)]
 #[path = "mcp_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "mcp_display_policy_tests.rs"]
+mod display_policy_tests;
 
 fn mcp_auth_status_label(status: McpAuthStatus) -> &'static str {
     match status {
@@ -55,6 +66,10 @@ pub(crate) struct McpToolCallCell {
     duration: Option<Duration>,
     result: Option<Result<McpToolResult, String>>,
     animations_enabled: bool,
+    tool_call_display: ToolCallDisplay,
+    /// Allowlisted argument summary, computed once so rendering a running
+    /// call never re-serializes bulky arguments on animation ticks.
+    preview_summary: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -89,7 +104,9 @@ impl McpToolCallCell {
         call_id: String,
         invocation: McpInvocation,
         animations_enabled: bool,
+        tool_call_display: ToolCallDisplay,
     ) -> Self {
+        let preview_summary = preview_args_summary(&invocation);
         Self {
             call_id,
             invocation,
@@ -97,6 +114,8 @@ impl McpToolCallCell {
             duration: None,
             result: None,
             animations_enabled,
+            tool_call_display,
+            preview_summary,
         }
     }
 
@@ -176,7 +195,7 @@ impl McpToolCallCell {
             .and_then(serde_json::Value::as_str)
             .map(|title| title.split_whitespace().collect::<Vec<_>>().join(" "))
             .filter(|title| !title.is_empty());
-        let invocation_line = if compact {
+        let mut invocation_line = if compact {
             Line::from(
                 title
                     .clone()
@@ -185,9 +204,43 @@ impl McpToolCallCell {
                     })
                     .fg(accent_color()),
             )
-        } else {
+        } else if mode == McpToolCallRenderMode::Transcript {
+            // The transcript and activity expansion always expose full details
+            // on purpose, independent of the everyday display policy.
             line_to_static(&format_mcp_invocation(&self.invocation))
+        } else {
+            match self.tool_call_display {
+                ToolCallDisplay::Full => line_to_static(&format_mcp_invocation(&self.invocation)),
+                ToolCallDisplay::Compact => Line::from(
+                    compact_invocation_text(&self.invocation).fg(accent_color()),
+                ),
+                ToolCallDisplay::Preview => match &self.preview_summary {
+                    Some(summary) => Line::from(vec![
+                        self.invocation.server.clone().fg(accent_color()),
+                        ".".into(),
+                        self.invocation.tool.clone().fg(accent_color()),
+                        "(".into(),
+                        summary.clone().dim(),
+                        ")".into(),
+                    ]),
+                    None => Line::from(
+                        compact_invocation_text(&self.invocation).fg(accent_color()),
+                    ),
+                },
+            }
         };
+        // `Full` keeps the legacy header byte-for-byte; compact modes surface
+        // the completed status explicitly instead of echoing payloads. The
+        // suffix rides on the invocation line so narrow wrapping stays bounded.
+        // Transcript rendering always restores the original details verbatim.
+        if mode == McpToolCallRenderMode::Display
+            && let Some(suffix) = match self.tool_call_display {
+                ToolCallDisplay::Full => None,
+                ToolCallDisplay::Compact | ToolCallDisplay::Preview => status_suffix(status),
+            }
+        {
+            invocation_line.spans.push(suffix.dim());
+        }
         let mut compact_spans = vec![bullet.clone(), " ".into()];
         if title.is_none() {
             compact_spans.extend([header_text.bold(), " ".into()]);
@@ -386,10 +439,32 @@ impl HistoryCell for McpToolCallCell {
         } else {
             "Calling"
         };
-        let mut lines = vec![Line::from(format!(
-            "{header_text} {}",
-            format_mcp_invocation(&self.invocation)
-        ))];
+        // Code-mode cells and `Full` keep the legacy raw rendering; compact
+        // modes reduce standard invocations the same way display does.
+        let invocation_text = if self.result_kind() == McpResultKind::Standard {
+            match self.tool_call_display {
+                ToolCallDisplay::Full => format!("{}", format_mcp_invocation(&self.invocation)),
+                ToolCallDisplay::Compact => {
+                    let suffix = status_suffix(self.success()).unwrap_or_default();
+                    format!("{}{suffix}", compact_invocation_text(&self.invocation))
+                }
+                ToolCallDisplay::Preview => {
+                    let suffix = status_suffix(self.success()).unwrap_or_default();
+                    match &self.preview_summary {
+                        Some(summary) => format!(
+                            "{}.{}({summary}){suffix}",
+                            self.invocation.server, self.invocation.tool
+                        ),
+                        None => {
+                            format!("{}{suffix}", compact_invocation_text(&self.invocation))
+                        }
+                    }
+                }
+            }
+        } else {
+            format!("{}", format_mcp_invocation(&self.invocation))
+        };
+        let mut lines = vec![Line::from(format!("{header_text} {invocation_text}"))];
 
         if let Some(result) = &self.result {
             match result {
@@ -434,8 +509,9 @@ pub(crate) fn new_active_mcp_tool_call(
     call_id: String,
     invocation: McpInvocation,
     animations_enabled: bool,
+    tool_call_display: ToolCallDisplay,
 ) -> McpToolCallCell {
-    McpToolCallCell::new(call_id, invocation, animations_enabled)
+    McpToolCallCell::new(call_id, invocation, animations_enabled, tool_call_display)
 }
 /// Render a summary of configured MCP servers from the current `Config`.
 pub(crate) fn empty_mcp_output() -> WebHyperlinkHistoryCell {

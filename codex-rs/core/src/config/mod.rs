@@ -777,6 +777,11 @@ pub struct Config {
     /// Start the TUI in raw scrollback mode for copy-friendly transcript output.
     pub tui_raw_output_mode: bool,
 
+    /// How the TUI renders MCP tool invocations in everyday history.
+    ///
+    /// This is the same `tui.tool_call_display` value from `config.toml`.
+    pub tui_tool_call_display: codex_config::types::ToolCallDisplay,
+
     /// Own the fullscreen transcript when the alternate screen is enabled.
     pub tui_fullscreen_transcript: bool,
 
@@ -4433,6 +4438,11 @@ impl Config {
                 .as_ref()
                 .map(|t| t.raw_output_mode)
                 .unwrap_or(false),
+            tui_tool_call_display: cfg
+                .tui
+                .as_ref()
+                .map(|t| t.tool_call_display)
+                .unwrap_or_default(),
             tui_fullscreen_transcript: cfg
                 .tui
                 .as_ref()

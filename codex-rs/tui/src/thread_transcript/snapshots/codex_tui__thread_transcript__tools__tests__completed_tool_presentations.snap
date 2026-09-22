@@ -26,7 +26,7 @@ output line 12
 ✓ • 0ms
 
 MCP: compact
-• Called example.js({"title":"Inspect page mcp","code":"await cua.getState()"})
+• Called example.js · succeeded
   └ Full result for mcp
 
 MCP: detailed

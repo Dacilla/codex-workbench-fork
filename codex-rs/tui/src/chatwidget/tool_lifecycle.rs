@@ -196,6 +196,7 @@ impl ChatWidget {
                 id,
                 invocation,
                 self.local_settings.tui.animations && self.local_settings.tui.effects.progress,
+                self.local_settings.tui.tool_call_display,
             );
             self.update_computer_activity(|cell| cell.start(call));
             self.bump_active_cell_revision();
@@ -207,6 +208,7 @@ impl ChatWidget {
             id,
             invocation,
             self.local_settings.tui.animations && self.local_settings.tui.effects.progress,
+            self.local_settings.tui.tool_call_display,
         )));
         self.bump_active_cell_revision();
         self.request_redraw();
@@ -230,6 +232,7 @@ impl ChatWidget {
                 id,
                 invocation,
                 self.local_settings.tui.animations && self.local_settings.tui.effects.progress,
+                self.local_settings.tui.tool_call_display,
             );
             self.update_computer_activity(|cell| cell.complete(call, duration, result));
             self.bump_active_cell_revision();
@@ -250,6 +253,7 @@ impl ChatWidget {
                     id,
                     invocation,
                     self.local_settings.tui.animations && self.local_settings.tui.effects.progress,
+                    self.local_settings.tui.tool_call_display,
                 );
                 cell.complete(duration, result);
                 self.transcript.active_cell = Some(Box::new(cell));

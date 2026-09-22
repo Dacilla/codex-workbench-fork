@@ -17,6 +17,7 @@ async fn external_writer_snapshot_freezes_active_command_and_mcp_rows() {
                     arguments: None,
                 },
                 /*animations_enabled*/ true,
+                codex_config::types::ToolCallDisplay::Full,
             )));
         } else {
             begin_exec(&mut chat, "call-running", "sleep 5");
@@ -93,6 +94,7 @@ async fn replayed_completion_preserves_unrelated_running_command() {
                     arguments: None,
                 },
                 /*animations_enabled*/ false,
+                codex_config::types::ToolCallDisplay::Full,
             )));
         }
         if let AppServerThreadItem::CommandExecution {

@@ -662,7 +662,24 @@ impl Default for Notifications {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, Default)]
+/// How the TUI renders MCP tool invocations in everyday history.
+///
+/// `Compact` shows `server.tool` plus status without echoing arguments.
+/// `Preview` adds an allowlisted summary: JSON numbers, booleans, and nulls
+/// render verbatim while strings, arrays, and objects collapse to
+/// `key=<hidden: N chars>`. `Full` restores the complete JSON arguments.
+/// The Ctrl+T transcript and activity expansion always retain full details,
+/// independent of this setting.
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq, Default, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ToolCallDisplay {
+    #[default]
+    Compact,
+    Preview,
+    Full,
+}
+
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq, JsonSchema, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum NotificationMethod {
     #[default]
@@ -797,6 +814,13 @@ pub struct Tui {
     /// Defaults to `false`.
     #[serde(default)]
     pub raw_output_mode: bool,
+
+    /// How MCP tool invocations render in everyday history (`compact`,
+    /// `preview`, or `full`). Code-mode cells keep their title rendering and
+    /// the Ctrl+T transcript always retains full details.
+    /// Defaults to `compact`.
+    #[serde(default)]
+    pub tool_call_display: ToolCallDisplay,
 
     /// Own the fullscreen transcript, including scrolling, selection, and search.
     /// Defaults to `true`; alternate-screen restrictions take precedence.

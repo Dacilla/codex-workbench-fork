@@ -1370,7 +1370,7 @@ async fn failed_repl_mcp_tool_call_preserves_status_and_result() {
         }
         insta::allow_duplicates! {
             insta::assert_snapshot!(lines_to_single_string(lines), @r#"
-            • Inspect workspace
+            • Inspect workspace · failed
               └ Script failed
                 {"exit_code": 0, "output": "ready", "chunk_id": "chunk-1"}
                 Script error:
@@ -1383,6 +1383,7 @@ async fn failed_repl_mcp_tool_call_preserves_status_and_result() {
                 "•".red().bold(),
                 " ".into(),
                 "Inspect workspace".fg(crate::style::accent_color()),
+                " · failed".dim(),
             ])),
             "{server}",
         );
