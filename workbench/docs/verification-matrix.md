@@ -26,9 +26,15 @@ Do not claim completeness from mock tests alone.
 
 ## M3 — App Server vertical slice (Track B)
 
-- [ ] Two editor webviews, one App Server, correct per-thread routing
-- [ ] User-mediated approval, interrupt, crash/reconnect
-- [ ] Thread reopen via paginated read APIs, no duplicate deltas
+Branch `feature/vscode-appserver`. Extension SHA: see commit log. Pinned protocol SHA `639d2478cc2e16d6ca715952d2e726a3aecc024e` (`npm run check-protocol-pin`).
+
+- [x] Two editor webviews, one App Server, correct per-thread routing — FAKE-ONLY: `npm run test` ("two-thread routing", "global notifications") on Windows 11 x64, Node 23.10.0, 2026-09-22. Real-backend concurrency UNTESTED.
+- [x] User-mediated approval, interrupt, crash/reconnect — FAKE-ONLY: owned approve/deny exactly-once, orphaned decline, decision timeout, crash settlement (`TransportClosedError` + `crashed` state). Live interactive approval UNTESTED (needs model turn; opt-in steps in `vscode-manual-tests.md`).
+- [x] Thread reopen via paginated read APIs, no duplicate deltas — FAKE-ONLY (`thread/resume` + `excludeTurns` + `thread/turns/list` + `thread/items/list`, dedup asserted) plus LIVE-OFFICIAL read probes against codex-cli 0.155.1 (`thread/list`, `thread/resume`, `thread/turns/list`, `thread/items/list`, `model/list`, `getAuthStatus`, `modelProvider/capabilities/read` — read-only, 2026-09-22). `turn/start` against a real backend UNTESTED.
+- [ ] Live Extension Development Host render of two tabs (manual steps in `vscode-manual-tests.md`).
+- [ ] Real-backend simultaneous-turn concurrency (documented trigger for revisiting single-server isolation).
+
+Full per-method status: `vscode-feature-matrix.md`. Known gaps: auth/connected-apps parity not claimed; webview ES-module load not yet rendered live; no Remote SSH run yet.
 
 ## M4 — IDE client
 

@@ -1,0 +1,107 @@
+{
+  "name": "codex-workbench",
+  "displayName": "Codex Workbench",
+  "description": "Independent graphical Codex client: editor-tab conversations over the version-pinned App Server protocol. No terminal UI, no proprietary assets.",
+  "version": "0.1.0",
+  "publisher": "codex-workbench",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dacilla/codex-workbench-fork.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "Reads only untrusted workspace metadata for file context; never executes tools without backend approval routing."
+    }
+  },
+  "main": "./out/extension.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:webview": "tsc -p tsconfig.webview.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.webview.json",
+    "lint": "node scripts/lint.js",
+    "test": "npm run build && npm run build:webview && node --test out/test/*.test.js",
+    "package": "node scripts/package-vsix.js",
+    "check-protocol-pin": "node scripts/check-protocol-pin.js",
+    "vscode:prepublish": "npm run check-protocol-pin && npm run build && npm run build:webview"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "codexWorkbench.newChat",
+        "title": "Codex Workbench: New Chat in Editor Tab"
+      },
+      {
+        "command": "codexWorkbench.openChatBeside",
+        "title": "Codex Workbench: Open Chat Beside"
+      },
+      {
+        "command": "codexWorkbench.resumeChat",
+        "title": "Codex Workbench: Open/Resume Existing Chat"
+      },
+      {
+        "command": "codexWorkbench.renameTab",
+        "title": "Codex Workbench: Rename Tab"
+      },
+      {
+        "command": "codexWorkbench.reconnectBackend",
+        "title": "Codex Workbench: Reconnect Backend"
+      },
+      {
+        "command": "codexWorkbench.showLogs",
+        "title": "Codex Workbench: Show Logs"
+      },
+      {
+        "command": "codexWorkbench.attachSelection",
+        "title": "Codex Workbench: Attach Selection as Context"
+      }
+    ],
+    "configuration": {
+      "title": "Codex Workbench",
+      "properties": {
+        "codexWorkbench.codexExecutablePath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Explicit path to the `codex` executable on the EXECUTION host (the machine running the workspace extension host). Empty = auto-discover. This setting is never transferred across Remote SSH boundaries: a local Windows path is never used on a remote Linux host."
+        },
+        "codexWorkbench.approvalPolicy": {
+          "type": "string",
+          "enum": [
+            "untrusted",
+            "on-failure",
+            "on-request",
+            "never"
+          ],
+          "default": "on-request",
+          "description": "Default approval policy sent on thread/start. The backend may narrow it; the UI always fails closed."
+        }
+      }
+    }
+  },
+  "activationEvents": [
+    "onCommand:codexWorkbench.newChat",
+    "onCommand:codexWorkbench.openChatBeside",
+    "onCommand:codexWorkbench.resumeChat",
+    "onCommand:codexWorkbench.reconnectBackend",
+    "onCommand:codexWorkbench.showLogs",
+    "onWebviewPanel:codexWorkbench.chat"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^4.0.0",
+    "typescript": "^5.6.0"
+  }
+}

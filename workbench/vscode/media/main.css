@@ -1,0 +1,97 @@
+/* Codex Workbench webview styles. VS Code theme tokens only — no hardcoded palette. */
+#wb-status {
+  font-size: 11px;
+  opacity: 0.8;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  color: var(--vscode-foreground);
+}
+#wb-convo {
+  padding: 8px;
+  overflow-y: auto;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+}
+.wb-user {
+  background: var(--vscode-textBlockQuote-background);
+  border-left: 2px solid var(--vscode-textLink-foreground);
+  padding: 6px 8px;
+  margin: 8px 0;
+  white-space: pre-wrap;
+}
+.wb-agent {
+  padding: 4px 0;
+  margin: 4px 0;
+  line-height: 1.5;
+}
+.wb-agent code, .wb-tool-body code {
+  font-family: var(--vscode-editor-font-family);
+  background: var(--vscode-textCodeBlock-background);
+  padding: 0 3px;
+}
+.wb-tool {
+  border: 1px solid var(--vscode-panel-border);
+  margin: 6px 0;
+}
+.wb-tool-head {
+  background: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+  border: none;
+  width: 100%;
+  text-align: left;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.wb-tool-body {
+  padding: 4px 8px;
+  font-size: 12px;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.wb-hidden { display: none; }
+.wb-approval {
+  border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-panel-border));
+  padding: 8px;
+  margin: 8px 0;
+}
+.wb-approval-title { font-weight: bold; }
+.wb-approval-summary {
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+  margin: 4px 0;
+  white-space: pre-wrap;
+}
+.wb-approval-method { font-size: 11px; opacity: 0.7; }
+.wb-approval-actions button { margin-right: 8px; }
+#wb-composer {
+  border-top: 1px solid var(--vscode-panel-border);
+  padding: 8px;
+}
+#wb-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  font-family: var(--vscode-font-family);
+  resize: vertical;
+}
+.wb-composer-row { margin-top: 4px; }
+.wb-context { font-size: 11px; opacity: 0.8; margin-bottom: 4px; }
+.wb-empty { opacity: 0.85; }
+.wb-session { display: block; width: 100%; text-align: left; margin: 4px 0; }
+.wb-session-name { font-weight: bold; display: block; }
+.wb-session-preview { font-size: 12px; opacity: 0.8; display: block; }
+button {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+button:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
+a { color: var(--vscode-textLink-foreground); }
