@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { escapeHtml, sanitizeLinkUrl, validateWebviewMessage } from "../webview/protocol";
 import { initialState, reduce } from "../webview/state";
+import { toolCardHtml } from "../webview/ToolActivity";
 import { isRemoteUri, referenceFromEditorContext, renderReferenceAsMention } from "../ide/UriContext";
 import { diffCandidateFor } from "../ide/DiffProvider";
 import { parseInboundLine } from "../backend/JsonRpcTransport";
@@ -81,6 +82,32 @@ describe("conversation reducer", () => {
     state = reduce(state, { type: "ext/approvalSettled", requestId: "r-1", approved: false, failClosed: true });
     assert.equal(state.approvals[0]?.settled, true);
     assert.equal(state.approvals[0]?.failClosed, true);
+  });
+
+  it("adopts the optimistic local echo instead of duplicating", () => {
+    let state = initialState();
+    state = reduce(state, { type: "ext/item", turnId: "local", itemId: "local-1", kind: "userMessage", text: "Test" });
+    assert.equal(state.items.length, 1);
+    state = reduce(state, { type: "ext/item", turnId: "t-1", itemId: "backend-9", kind: "userMessage", text: "Test" });
+    assert.equal(state.items.length, 1, "backend echo adopts the local card");
+    assert.equal(state.items[0]?.itemId, "backend-9");
+    assert.equal(state.items[0]?.turnId, "t-1");
+    // A genuinely different message still appends.
+    state = reduce(state, { type: "ext/item", turnId: "t-1", itemId: "backend-10", kind: "userMessage", text: "Other" });
+    assert.equal(state.items.length, 2);
+  });
+
+  it("renders friendly collapsed tool cards with previews", () => {
+    const html = toolCardHtml({ itemId: "r-1", turnId: "t-1", kind: "reasoning", text: "First line\nSecond line", status: "final", collapsed: true });
+    assert.ok(html.includes("▸"));
+    assert.ok(html.includes("Thinking"));
+    assert.ok(html.includes("First line"));
+    assert.ok(!html.includes("Second line"));
+    assert.ok(!html.includes("<br>"));
+    const open = toolCardHtml({ itemId: "r-1", turnId: "t-1", kind: "commandExecution", text: "a\nb", status: "final", collapsed: false });
+    assert.ok(open.includes("▾"));
+    assert.ok(open.includes("Terminal"));
+    assert.ok(open.includes("a<br>b"));
   });
 
   it("tracks MCP status per server without timeline items", () => {
