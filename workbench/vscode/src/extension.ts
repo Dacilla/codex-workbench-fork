@@ -248,6 +248,7 @@ async function createChatPanel(
   });
   panel.webview.html = renderHtml(panel.webview, panelId, null, "");
   wirePanel(panelContext);
+  trackPanelFocus(panel, panelId);
   panel.onDidDispose(() => {
     // Close tab ≠ delete thread: drop the binding, fail closed any prompt
     // owned by this panel, keep the thread on the backend.
@@ -337,13 +338,22 @@ async function pickAndResume(): Promise<void> {
   if (picked === undefined) {
     return;
   }
+  const pickedId = String((picked.thread as Record<string, unknown>)["id"]);
+  // One thread, one live view: revealing beats a duplicate tab whose
+  // approvals could then race the original panel.
+  const alreadyOpen = findLivePanelForThread(pickedId);
+  if (alreadyOpen !== undefined) {
+    alreadyOpen.panel.reveal(alreadyOpen.panel.viewColumn);
+    void vscode.window.showInformationMessage("Codex Workbench: that thread is already open — revealed it instead.");
+    return;
+  }
   const newest = await createChatPanel(vscode.ViewColumn.Active, { startThread: false });
   // Attach the resumed thread to the fresh panel. No backend thread leaks:
   // createChatPanel skips thread/start for resume flows.
   if (newest === null || manager === null) {
     return;
   }
-  const threadId = String((picked.thread as Record<string, unknown>)["id"]);
+  const threadId = pickedId;
   try {
     await manager.resumeThread(threadId);
     newest.threadId = threadId;
@@ -359,7 +369,7 @@ async function pickAndResume(): Promise<void> {
 }
 
 async function renameActiveTab(): Promise<void> {
-  const entry = [...livePanels.values()].find((panelContext) => panelContext.panel.visible);
+  const entry = activePanel();
   if (entry === undefined) {
     return;
   }
@@ -371,16 +381,43 @@ async function renameActiveTab(): Promise<void> {
 }
 
 /**
- * The panel model/effort commands act on: the visible chat tab, or the only
- * live panel when exactly one exists. Otherwise the choice would silently
- * hit the wrong thread, so the command errors and asks for a focused tab.
+ * The panel model/effort/context commands act on: the focused chat tab when
+ * known, else the visible chat tab, or the only live panel when exactly one
+ * exists. Focus tracking matters because in a split layout every panel is
+ * `visible`, so first-visible would silently hit the wrong thread.
  */
+let activePanelId: string | null = null;
+
+function trackPanelFocus(panel: vscode.WebviewPanel, panelId: string): void {
+  panel.onDidChangeViewState((event) => {
+    if (event.webviewPanel.active) {
+      activePanelId = panelId;
+    }
+  });
+  panel.onDidDispose(() => {
+    if (activePanelId === panelId) {
+      activePanelId = null;
+    }
+  });
+}
+
 function activePanel(): PanelContext | undefined {
+  const focused = activePanelId !== null ? livePanels.get(activePanelId) : undefined;
+  if (focused !== undefined) {
+    return focused;
+  }
   const visible = [...livePanels.values()].find((panelContext) => panelContext.panel.visible);
   if (visible !== undefined) {
     return visible;
   }
   return livePanels.size === 1 ? [...livePanels.values()][0] : undefined;
+}
+
+/** A different live panel already showing this thread (same-thread views are forbidden). */
+function findLivePanelForThread(threadId: string, exceptPanelId?: string): PanelContext | undefined {
+  return [...livePanels.values()].find(
+    (panelContext) => panelContext.threadId === threadId && panelContext.panelId !== exceptPanelId,
+  );
 }
 
 /**
@@ -544,7 +581,7 @@ async function selectEffort(): Promise<void> {
 
 async function attachSelection(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
-  const panelContext = [...livePanels.values()].find((entry) => entry.panel.visible);
+  const panelContext = activePanel();
   if (editor === undefined || panelContext === null || panelContext === undefined) {
     return;
   }
@@ -581,6 +618,7 @@ async function restorePanel(restored: vscode.WebviewPanel, state: { panelId: str
     livePanels.set(panelId, panelContext);
     restored.webview.html = renderHtml(restored.webview, panelId, panelContext.threadId, "");
     wirePanel(panelContext);
+    trackPanelFocus(restored, panelId);
     restored.onDidDispose(() => {
       manager?.panelDisposed(panelId, panelContext.threadId);
       panelContext.unsubscribe?.();
@@ -675,6 +713,11 @@ async function handleWebviewMessage(panelContext: PanelContext, type: string, pa
     }
     case "session/pick": {
       const threadId = String(record["threadId"] ?? "");
+      const elsewhere = findLivePanelForThread(threadId, panelContext.panelId);
+      if (elsewhere !== undefined) {
+        void panelContext.panel.webview.postMessage({ type: "ext/error", message: "that thread is already open in another tab" });
+        break;
+      }
       try {
         await manager.resumeThread(threadId);
         panelContext.threadId = threadId;
