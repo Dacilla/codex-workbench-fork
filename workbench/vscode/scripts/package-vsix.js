@@ -31,11 +31,11 @@ for (const dir of ["out", "media"]) {
 }
 
 try {
-  const vsceMain = path.join(ROOT, "node_modules", "@vscode", "vsce", "out", "main.js");
-  if (!fs.existsSync(vsceMain)) {
-    throw new Error("missing node_modules/@vscode/vsce (run npm ci)");
+  const runner = path.join(ROOT, "scripts", "run-vsce.js");
+  run(process.execPath, [runner, "package", "--no-dependencies", "--out", outFile]);
+  if (!fs.existsSync(outFile)) {
+    throw new Error("vsce reported success but wrote no file");
   }
-  run(process.execPath, [vsceMain, "package", "--no-dependencies", "--out", outFile]);
   console.log(`package-vsix: OK via vsce: ${outFile}`);
 } catch (error) {
   console.error(`package-vsix: vsce failed (${error.message}); CI must install @vscode/vsce to package.`);
