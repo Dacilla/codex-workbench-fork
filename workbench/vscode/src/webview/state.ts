@@ -81,13 +81,22 @@ export function reduce(state: ConversationState, event: ExtensionEvent): Convers
     }
     case "ext/item": {
       const items = [...state.items];
-      const index = items.findIndex((item) => item.itemId === event.itemId);
       const finalized: ChatItem = { itemId: event.itemId, turnId: event.turnId, kind: event.kind, text: clipText(event.text), status: "final", collapsed: isCollapsibleKind(event.kind) };
-      if (index === -1) {
-        items.push(finalized);
-      } else {
+      const index = items.findIndex((item) => item.itemId === event.itemId);
+      if (index !== -1) {
         items[index] = finalized;
+        return { ...state, items: items.slice(-MAX_ITEMS) };
       }
+      // Adopt the optimistic local echo: the backend re-emits our sent
+      // message as its own item, which would otherwise double-render.
+      if (event.kind === "userMessage") {
+        const local = items.findIndex((item) => item.kind === "userMessage" && item.turnId === "local" && item.text === finalized.text);
+        if (local !== -1) {
+          items[local] = finalized;
+          return { ...state, items: items.slice(-MAX_ITEMS) };
+        }
+      }
+      items.push(finalized);
       return { ...state, items: items.slice(-MAX_ITEMS) };
     }
     case "ext/turnStatus": {
