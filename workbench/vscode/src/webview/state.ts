@@ -33,10 +33,12 @@ export interface ConversationState {
   connection: string;
   error: string | null;
   droppedEvents: number;
+  /** Compact per-server MCP status (update-in-place, never timeline cards). */
+  mcp: Record<string, { status: string; hasError: boolean }>;
 }
 
 export function initialState(): ConversationState {
-  return { items: [], approvals: [], turnStatus: "idle", activeTurnId: null, connection: "connecting", error: null, droppedEvents: 0 };
+  return { items: [], approvals: [], turnStatus: "idle", activeTurnId: null, connection: "connecting", error: null, droppedEvents: 0, mcp: {} };
 }
 
 export type ExtensionEvent =
@@ -47,7 +49,8 @@ export type ExtensionEvent =
   | { type: "ext/approval"; requestId: string | number; method: string; summary: string }
   | { type: "ext/approvalSettled"; requestId: string | number; approved: boolean; failClosed: boolean }
   | { type: "ext/error"; message: string }
-  | { type: "ext/connection"; state: string; detail: string; droppedEvents?: number };
+  | { type: "ext/connection"; state: string; detail: string; droppedEvents?: number }
+  | { type: "ext/mcpStatus"; server: string; status: string; hasError: boolean };
 
 const MAX_ITEMS = 2000;
 const MAX_TEXT_PER_ITEM = 256 * 1024;
@@ -107,6 +110,21 @@ export function reduce(state: ConversationState, event: ExtensionEvent): Convers
     }
     case "ext/connection": {
       return { ...state, connection: event.state, error: event.state === "ready" ? null : event.detail, droppedEvents: event.droppedEvents ?? state.droppedEvents };
+    }
+    case "ext/mcpStatus": {
+      // Update-in-place per server; bounded so a pathological server list
+      // cannot grow webview state without limit.
+      const server = event.server.slice(0, 200);
+      const status = event.status.slice(0, 100);
+      if (server.length === 0) {
+        return state;
+      }
+      const mcp = { ...state.mcp };
+      if (mcp[server] === undefined && Object.keys(mcp).length >= 64) {
+        return state;
+      }
+      mcp[server] = { status, hasError: event.hasError };
+      return { ...state, mcp };
     }
     default: {
       return state;

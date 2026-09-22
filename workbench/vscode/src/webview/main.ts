@@ -36,7 +36,7 @@ function render(): void {
   const status = document.getElementById("wb-status");
   if (status !== null) {
     const turn = state.turnStatus === "idle" ? "idle" : state.turnStatus;
-    status.textContent = `${state.connection} · ${turn}${state.activeTurnId !== null ? ` (${state.activeTurnId.slice(0, 8)})` : ""}${state.droppedEvents > 0 ? ` · ${state.droppedEvents} buffered events dropped` : ""}${state.error !== null ? ` · ${state.error}` : ""}`;
+    status.textContent = `${state.connection} · ${turn}${state.activeTurnId !== null ? ` (${state.activeTurnId.slice(0, 8)})` : ""}${mcpSegment()}${state.droppedEvents > 0 ? ` · ${state.droppedEvents} buffered events dropped` : ""}${state.error !== null ? ` · ${state.error}` : ""}`;
   }
   if (convo === null) {
     return;
@@ -54,6 +54,16 @@ function render(): void {
   }
   convo.innerHTML = parts.join("");
   convo.scrollTop = convo.scrollHeight;
+}
+
+function mcpSegment(): string {
+  const entries = Object.entries(state.mcp);
+  if (entries.length === 0) {
+    return "";
+  }
+  const shown = entries.slice(0, 4).map(([server, info]) => `${server} ${info.status}${info.hasError ? "!" : ""}`);
+  const extra = entries.length > 4 ? ` +${entries.length - 4} more` : "";
+  return ` · MCP: ${shown.join(", ")}${extra}`;
 }
 
 function renderItem(item: ChatItem): string {
@@ -85,6 +95,7 @@ window.addEventListener("message", (event: MessageEvent) => {
     case "ext/approvalSettled":
     case "ext/error":
     case "ext/connection":
+    case "ext/mcpStatus":
       applyEvent(message as unknown as ExtensionEvent);
       break;
     case "ext/threads":
