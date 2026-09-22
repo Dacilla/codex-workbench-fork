@@ -24,9 +24,9 @@ export interface ConnectedManager {
   cleanup: () => Promise<void>;
 }
 
-export async function connectFake(fakeArgs: string[] = []): Promise<ConnectedManager> {
+export async function connectFake(fakeArgs: string[] = [], options: { cwd?: string; experimentalApi?: boolean } = {}): Promise<ConnectedManager> {
   const manager = new SessionManager();
-  await manager.connect(process.execPath, [FAKE_PATH, ...fakeArgs]);
+  await manager.connect(process.execPath, [FAKE_PATH, ...fakeArgs], options);
   return {
     manager,
     cleanup: () => manager.disconnect("test cleanup"),

@@ -16,6 +16,8 @@ import { JsonRpcTransport } from "../backend/JsonRpcTransport";
 import { ProcessManager } from "../backend/ProcessManager";
 import { HandshakeResult, performHandshake } from "../backend/ProtocolVersion";
 import { ApprovalHandler, ApprovalHandlerEvents } from "./Approvals";
+import { buildThreadModeUpdateParams, validateCollaborationMode } from "./CollaborationMode";
+import type { CollaborationModeKind } from "./CollaborationMode";
 import { EventRouter, ThreadSink } from "./EventRouter";
 import { ThreadRegistry } from "./ThreadRegistry";
 import { RpcNotification, RpcRequest } from "../backend/JsonRpcTransport";
@@ -45,6 +47,22 @@ export interface TurnOptions {
   /**
    * Override the reasoning effort for this turn and subsequent turns
    * (protocol pins the thread). Forwarded only when set — never as null.
+   */
+  effort?: string;
+}
+
+export interface ThreadModeOptions {
+  /**
+   * Explicit model for `collaboration_mode.settings.model`. Defaults to the
+   * thread's effective model pin, then the backend-reported thread model.
+   * When no model is known the call throws instead of sending an empty
+   * `settings.model` (fail closed).
+   */
+  model?: string;
+  /**
+   * Explicit reasoning effort for `collaboration_mode.settings.
+   * reasoning_effort`. Defaults to the thread's effective effort pin, then
+   * the backend-reported thread effort, else null.
    */
   effort?: string;
 }
@@ -259,6 +277,52 @@ export class SessionManager {
 
   async listModels(): Promise<Record<string, unknown>> {
     return (await this.requireTransport().request("model/list", {})) as Record<string, unknown>;
+  }
+
+  /**
+   * Set a thread's collaboration mode for this turn and subsequent turns via
+   * the experimental `thread/settings/update` escape hatch (see
+   * `sessions/CollaborationMode.ts` for the gating analysis: the whole
+   * method requires the `experimentalApi` handshake capability, so callers
+   * must connect with `experimentalApi: true` or this throws the backend's
+   * honest error).
+   *
+   * Only `collaborationMode` is sent — every other settings key is omitted
+   * so nothing else changes. `settings.model`/`reasoning_effort` echo the
+   * thread's current values because a `Some(collaboration_mode)` REPLACES
+   * the mode+settings server-side; sending blanks would clobber model/effort
+   * pins. `settings.developer_instructions` is null ("use the built-in
+   * instructions for the selected mode").
+   *
+   * Fail-closed: validation errors and backend rejections throw and leave
+   * the local mode map untouched (the registry records the mode only after
+   * the transport confirms success). Callers surface the error, never a
+   * faked success.
+   */
+  async setThreadMode(threadId: string, mode: CollaborationModeKind, options: ThreadModeOptions = {}): Promise<Record<string, unknown>> {
+    const modeCheck = validateCollaborationMode(mode);
+    if (!modeCheck.ok) {
+      throw new Error(`Codex Workbench: ${modeCheck.error}`);
+    }
+    if (typeof threadId !== "string" || threadId.length === 0) {
+      throw new Error("Codex Workbench: cannot set collaboration mode: threadId is empty");
+    }
+    const pins = this.threads.effectiveOverride(threadId);
+    const record = this.threads.getThread(threadId);
+    const model = options.model ?? pins.model ?? record?.model ?? null;
+    if (model === null || model.length === 0) {
+      throw new Error(`Codex Workbench: cannot set collaboration mode for thread ${threadId}: no model known for this thread (settings.model is required)`);
+    }
+    const rawEffort = options.effort ?? pins.effort ?? record?.effort ?? null;
+    const effort = rawEffort !== null && rawEffort.length > 0 ? rawEffort : null;
+    const built = buildThreadModeUpdateParams(threadId, modeCheck.mode, model, effort);
+    if (!built.ok) {
+      throw new Error(`Codex Workbench: ${built.error}`);
+    }
+    const transport = this.requireTransport();
+    const result = (await transport.request("thread/settings/update", built.params)) as Record<string, unknown>;
+    this.threads.setThreadMode(threadId, modeCheck.mode);
+    return result;
   }
 
   private routeServerRequest(request: RpcRequest): void {

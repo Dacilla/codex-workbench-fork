@@ -20,6 +20,8 @@ import type { EventRouter, ThreadSink } from "./sessions/EventRouter";
 import { ConnectGate } from "./sessions/ConnectGate";
 import { displayLabelFor, effortOptionsFor, findModel, parseModelList, validateModelChoice, visibleModels, defaultModel } from "./sessions/ModelCatalog";
 import type { ModelEntry } from "./sessions/ModelCatalog";
+import { COLLABORATION_MODE_OPTIONS, parsePersistedMode } from "./sessions/CollaborationMode";
+import type { CollaborationModeKind } from "./sessions/CollaborationMode";
 import { newPanelId } from "./sessions/ThreadRegistry";
 import type { PersistedPanelBinding } from "./sessions/ThreadRegistry";
 import { PanelRegistry } from "./sessions/PanelRegistry";
@@ -107,6 +109,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("codexWorkbench.attachSelection", () => void attachSelection()),
     vscode.commands.registerCommand("codexWorkbench.selectModel", () => void selectModel()),
     vscode.commands.registerCommand("codexWorkbench.selectEffort", () => void selectEffort()),
+    vscode.commands.registerCommand("codexWorkbench.selectMode", () => void selectMode()),
     vscode.window.registerWebviewPanelSerializer(VIEW_TYPE, {
       deserializeWebviewPanel: (restored, state) => restorePanel(restored, state as { panelId: string; threadId: string } | undefined),
     }),
@@ -174,7 +177,13 @@ async function doConnect(silent: boolean): Promise<boolean> {
   }
   try {
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    await manager.connect(executable, backendSpawnArgs(), { cwd });
+    // `thread/settings/update` (the collaboration-mode escape hatch) is an
+    // experimental method: the backend rejects it with "<reason> requires
+    // experimentalApi capability" unless the initialize handshake opts in
+    // (see sessions/CollaborationMode.ts). Opting in only *permits*
+    // experimental methods; the client still calls exactly the methods it
+    // calls, so stable behavior is unchanged.
+    await manager.connect(executable, backendSpawnArgs(), { cwd, experimentalApi: true });
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -287,6 +296,24 @@ async function createChatPanel(
     const threadId = thread["id"] as string;
     panelContext.threadId = threadId;
     manager.threads.bindPanel(panelId, threadId, "Codex Workbench", workspaceKey());
+    // New threads inherit the last explicitly chosen collaboration mode.
+    // `thread/start` has no mode slot (verified: no collaboration key in the
+    // generated ThreadStartParams), so a non-default inheritance is applied
+    // post-start via `thread/settings/update`. The backend default is
+    // "default", so nothing is sent when nothing was chosen. On failure the
+    // thread is honestly left at "default" (pinThreadMode records that
+    // without touching the session default) and the error is surfaced.
+    const inheritedMode = manager.threads.lastChosenMode();
+    if (inheritedMode !== "default") {
+      try {
+        await manager.setThreadMode(threadId, inheritedMode);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`inherited mode apply failed, thread stays default: ${message}`);
+        manager.threads.pinThreadMode(threadId, "default");
+        void panel.webview.postMessage({ type: "ext/error", message: `collaboration mode inheritance failed (thread stays default): ${message}` });
+      }
+    }
     subscribePanel(panelContext);
     panel.webview.html = renderHtml(panel.webview, panelId, threadId, "");
     void panel.webview.postMessage({ type: "ext/connection", state: "ready", detail: "thread started" });
@@ -428,10 +455,11 @@ function findLivePanelForThread(threadId: string, exceptPanelId?: string): Panel
 }
 
 /**
- * Post the effective model/effort header state for a panel: user pins first,
- * then the backend-reported thread values, then the honest backend default
- * (nulls — the header renders "default", never "unknown"). Display names
- * come from the last model/list fetch; raw ids are shown until one exists.
+ * Post the effective model/effort/mode header state for a panel: user pins
+ * first, then the backend-reported thread values, then the honest backend
+ * default (nulls — the header renders "default", never "unknown"). Display
+ * names come from the last model/list fetch; raw ids are shown until one
+ * exists. Mode rides the same ext/model event (no second header event).
  */
 function postModelState(panelContext: PanelContext): void {
   if (manager === null) {
@@ -443,7 +471,8 @@ function postModelState(panelContext: PanelContext): void {
   const model = pins.model ?? record?.model ?? null;
   const effort = pins.effort ?? record?.effort ?? null;
   const displayName = model !== null ? displayLabelFor(modelCatalog, model) : null;
-  void panelContext.panel.webview.postMessage({ type: "ext/model", model, effort, displayName });
+  const mode = threadId !== null ? manager.threads.effectiveMode(threadId) : manager.threads.lastChosenMode();
+  void panelContext.panel.webview.postMessage({ type: "ext/model", model, effort, displayName, mode });
 }
 
 /** Re-apply persisted pins after a reload (serializer restore path). */
@@ -465,6 +494,16 @@ function restoreThreadPins(threadId: string): void {
   }
   if (patch.model !== undefined || patch.effort !== undefined) {
     manager.threads.setThreadOverride(threadId, patch);
+  }
+  // Mode restore is local-only (like model/effort pins): the backend is
+  // expected to have persisted the mode with the thread (resume echoes
+  // collaborationMode), and re-sending unconditionally would spam an
+  // experimental call on every reload. Malformed values are ignored, never
+  // applied. If host and backend ever diverge, the next explicit Select
+  // Collaboration Mode re-applies honestly.
+  const mode = parsePersistedMode(binding.mode);
+  if (mode !== null) {
+    manager.threads.setThreadMode(threadId, mode);
   }
 }
 
@@ -582,6 +621,67 @@ async function selectEffort(): Promise<void> {
     manager.threads.rememberChoice({ effort: picked.id });
   }
   log(`effort selected: ${picked.id} thread=${threadId ?? "(none yet)"}${fromFallback ? " (static fallback)" : ""}`);
+  postModelState(panelContext);
+  persistBindings();
+}
+
+/**
+ * Host-side collaboration-mode picker: QuickPick over the two known modes,
+ * no webview messages. Applies via the experimental `thread/settings/update`
+ * escape hatch (SessionManager.setThreadMode), which throws the backend's
+ * honest error when the backend rejects it — the header only changes on
+ * success, never optimistically.
+ */
+async function selectMode(): Promise<void> {
+  if (manager === null) {
+    return;
+  }
+  const panelContext = activePanel();
+  if (panelContext === undefined) {
+    void vscode.window.showErrorMessage("Codex Workbench: focus a chat tab first, then pick a collaboration mode.");
+    return;
+  }
+  if (!(await ensureConnected(false)) || manager === null) {
+    return;
+  }
+  const threadId = panelContext.threadId;
+  const current: CollaborationModeKind = threadId !== null ? manager.threads.effectiveMode(threadId) : manager.threads.lastChosenMode();
+  const items = COLLABORATION_MODE_OPTIONS.map((option) => ({
+    label: `${option.label}${option.mode === current ? " (current)" : ""}`,
+    detail: option.description,
+    mode: option.mode,
+  }));
+  const picked = await vscode.window.showQuickPick(items, { placeHolder: "Select collaboration mode for this thread (Plan lets the model ask questions)" });
+  if (picked === undefined) {
+    return;
+  }
+  // Ids come from the static option list, so this cannot fail via the
+  // picker itself — defense in depth against a corrupted list.
+  if (picked.mode !== "default" && picked.mode !== "plan") {
+    void vscode.window.showErrorMessage(`Codex Workbench: unknown collaboration mode "${String(picked.mode)}".`);
+    return;
+  }
+  const mode: CollaborationModeKind = picked.mode;
+  if (threadId === null) {
+    manager.threads.rememberModeChoice(mode);
+    log(`mode selected with no thread yet, remembered for inheritance: ${mode}`);
+    postModelState(panelContext);
+    persistBindings();
+    return;
+  }
+  try {
+    await manager.setThreadMode(threadId, mode);
+  } catch (error) {
+    // Fail closed: the registry is untouched (success-only writes), so the
+    // header still shows the previous mode. Surface the backend error
+    // honestly instead of pretending the switch happened.
+    const message = error instanceof Error ? error.message : String(error);
+    log(`mode change failed: ${message}`);
+    void vscode.window.showErrorMessage(`Codex Workbench: collaboration mode change failed: ${message}`);
+    void panelContext.panel.webview.postMessage({ type: "ext/error", message: `mode change failed: ${message}` });
+    return;
+  }
+  log(`mode selected: ${mode} thread=${threadId}`);
   postModelState(panelContext);
   persistBindings();
 }
@@ -887,8 +987,10 @@ function persistBindings(): void {
       const existing = manager?.threads.bindingForPanel(panelContext.panelId);
       // Persist pins alongside the draft so a reload restores them
       // (restoreThreadPins). overrideParams omits unset keys, so untouched
-      // threads persist no model/effort and keep the backend default.
+      // threads persist no model/effort and keep the backend default. Mode
+      // follows the same rule: only a non-default effective mode persists.
       const pins = panelContext.threadId !== null ? (manager?.threads.overrideParams(panelContext.threadId) ?? {}) : {};
+      const mode = panelContext.threadId !== null ? manager?.threads.effectiveMode(panelContext.threadId) : undefined;
       return {
         panelId: panelContext.panelId,
         threadId: panelContext.threadId as string,
@@ -896,6 +998,7 @@ function persistBindings(): void {
         workspaceKey: workspaceKey(),
         draft: existing?.draft ?? "",
         ...pins,
+        ...(mode !== undefined && mode !== "default" ? { mode } : {}),
       };
     });
   void extensionContext.workspaceState.update(STORAGE_KEY, bindings);
