@@ -567,30 +567,41 @@ async function attachSelection(): Promise<void> {
 }
 
 async function restorePanel(restored: vscode.WebviewPanel, state: { panelId: string; threadId: string } | undefined): Promise<void> {
-  if (panels === null || state === undefined) {
+  if (panels === null) {
     return;
   }
-  const panelId = state.panelId ?? newPanelId();
-  const panelContext: PanelContext = { panel: restored, panelId, threadId: state.threadId ?? null, activeTurnId: null, mentions: [], unsubscribe: null };
-  livePanels.set(panelId, panelContext);
-  restored.webview.html = renderHtml(restored.webview, panelId, panelContext.threadId, "");
-  wirePanel(panelContext);
-  restored.onDidDispose(() => {
-    manager?.panelDisposed(panelId, panelContext.threadId);
-    panelContext.unsubscribe?.();
-    livePanels.delete(panelId);
-    persistBindings();
-  });
-  if (await ensureConnected(true) && manager !== null && panelContext.threadId !== null) {
-    try {
-      restoreThreadPins(panelContext.threadId);
-      await manager.resumeThread(panelContext.threadId);
-      subscribePanel(panelContext);
-      await hydratePanel(panelContext);
-      postModelState(panelContext);
-    } catch (error) {
-      void restored.webview.postMessage({ type: "ext/error", message: `restore failed: ${error instanceof Error ? error.message : String(error)}` });
+  try {
+    if (state === undefined) {
+      return;
     }
+    // Serialized state may come from an older build: validate before trusting.
+    const panelId = typeof state.panelId === "string" && state.panelId !== "" ? state.panelId : newPanelId();
+    const threadId = typeof state.threadId === "string" && state.threadId !== "" ? state.threadId : null;
+    const panelContext: PanelContext = { panel: restored, panelId, threadId, activeTurnId: null, mentions: [], unsubscribe: null };
+    livePanels.set(panelId, panelContext);
+    restored.webview.html = renderHtml(restored.webview, panelId, panelContext.threadId, "");
+    wirePanel(panelContext);
+    restored.onDidDispose(() => {
+      manager?.panelDisposed(panelId, panelContext.threadId);
+      panelContext.unsubscribe?.();
+      livePanels.delete(panelId);
+      persistBindings();
+    });
+    if (await ensureConnected(true) && manager !== null && panelContext.threadId !== null) {
+      try {
+        restoreThreadPins(panelContext.threadId);
+        await manager.resumeThread(panelContext.threadId);
+        subscribePanel(panelContext);
+        await hydratePanel(panelContext);
+        postModelState(panelContext);
+      } catch (error) {
+        void restored.webview.postMessage({ type: "ext/error", message: `restore failed: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
+  } catch (error) {
+    // A failed restore must never leave a dead webview: surface the error in
+    // the output channel so the user can close this tab and open a new chat.
+    log(`panel restore failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
