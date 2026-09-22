@@ -1,0 +1,16 @@
+---
+source: tui/src/history_cell/mcp_display_policy_tests.rs
+expression: "sections.join(\"\\n\\n\")"
+---
+compact:
+• Called docs.update · succeeded
+  └ done
+
+preview:
+• Called docs.update(pageId=204341250 · body=<hidden: 30 chars>) · succeeded
+  └ done
+
+full:
+• Called
+  └ docs.update({"pageId":204341250,"body":"confidential document contents"})
+    done

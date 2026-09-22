@@ -6,10 +6,18 @@ use crate::history_cell::HistoryCell;
 use crate::history_cell::McpToolCallCell;
 use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::Turn;
+use codex_config::types::ToolCallDisplay;
 use std::sync::Arc;
 
 pub(super) fn append(group: &mut ComputerActivityCell, call: McpHistory) {
-    let cell = McpToolCallCell::new(call.id, call.invocation, /*animations_enabled*/ false);
+    // Computer-activity cells keep their established title rendering in every
+    // display mode, so the policy value stored here is dormant by design.
+    let cell = McpToolCallCell::new(
+        call.id,
+        call.invocation,
+        /*animations_enabled*/ false,
+        ToolCallDisplay::Compact,
+    );
     group.complete(cell, call.duration, call.result);
 }
 

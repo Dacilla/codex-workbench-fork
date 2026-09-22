@@ -19,9 +19,9 @@ use codex_app_server_protocol::CommandExecutionSource;
 use codex_app_server_protocol::CommandExecutionStatus;
 use codex_app_server_protocol::McpToolCallStatus;
 use codex_app_server_protocol::ThreadItem;
+use codex_config::types::ToolCallDisplay;
 use codex_protocol::mcp::CallToolResult;
-use codex_protocol::parse_command::ParsedCommand;
-use ratatui::style::Stylize as _;
+use codex_protocol::parse_command::ParsedCommand;use ratatui::style::Stylize as _;
 use ratatui::text::Line;
 
 /// Preserve status and output when replay cannot reconstruct a rich completed tool cell.
@@ -235,9 +235,13 @@ impl McpHistory {
         })
     }
 
-    pub(crate) fn into_cell(self) -> McpToolCallCell {
-        let mut cell =
-            new_active_mcp_tool_call(self.id, self.invocation, /*animations_enabled*/ false);
+    pub(crate) fn into_cell(self, tool_call_display: ToolCallDisplay) -> McpToolCallCell {
+        let mut cell = new_active_mcp_tool_call(
+            self.id,
+            self.invocation,
+            /*animations_enabled*/ false,
+            tool_call_display,
+        );
         cell.complete(self.duration, self.result);
         cell
     }

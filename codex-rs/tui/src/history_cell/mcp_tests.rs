@@ -145,6 +145,7 @@ fn mcp_preview_shares_one_limit_across_blocks_and_preserves_transcript() {
             arguments: Some(json!({"title": "Search query"})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Full,
     );
     cell.complete(
         Duration::ZERO,
@@ -199,6 +200,7 @@ fn code_mode_output_shares_a_row_budget_across_blocks() {
             arguments: Some(json!({"title": "Inspect page", "code": "await tab.snapshot()"})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Full,
     );
     cell.complete(
         Duration::ZERO,
@@ -242,6 +244,7 @@ fn code_mode_output_preserves_trailing_failure_diagnostics_in_transcript() {
             arguments: Some(json!({"title": "Inspect page"})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Full,
     );
     cell.complete(
         Duration::ZERO,
@@ -300,6 +303,7 @@ fn code_mode_output_row_budget_applies_after_wrapping_and_to_errors() {
                     arguments: Some(json!({"title": "Inspect"})),
                 },
                 /*animations_enabled*/ false,
+                ToolCallDisplay::Full,
             );
             cell.complete(Duration::ZERO, completion);
             for width in [20, 40, 80] {
@@ -409,6 +413,7 @@ fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
             arguments: Some(json!({"title": "Inspect results"})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Full,
     );
     let unknown =
         json!({"type": "future_block", "text": "Script completed\nOutput:\nunknown-side output"});
@@ -495,6 +500,7 @@ fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
             arguments: None,
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Full,
     );
     cua_cell.complete(Duration::ZERO, Ok(tool_result));
     let display = cua_cell
@@ -539,6 +545,7 @@ fn titled_image_call_keeps_error_and_full_title_when_narrow() {
             arguments: Some(json!({"title": title})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Full,
     );
     assert_eq!(
         cell.display_lines(/*width*/ 80)[0].to_string(),
@@ -606,6 +613,7 @@ fn code_mode_transcript_preserves_long_code_and_indentation_across_wrapping() {
             arguments: None,
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Full,
     );
     cell.complete(
         Duration::ZERO,
@@ -634,6 +642,7 @@ fn mcp_result_preview_preserves_source_text_and_excludes_tree_gutters() {
             arguments: None,
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Full,
     );
     cell.complete(
         Duration::ZERO,

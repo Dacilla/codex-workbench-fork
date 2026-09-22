@@ -64,6 +64,7 @@ use codex_config::types::SessionPickerViewMode;
 use codex_config::types::SkillsConfig;
 use codex_config::types::ToolSuggestDisabledTool;
 use codex_config::types::ToolSuggestDiscoverableType;
+use codex_config::types::ToolCallDisplay;
 use codex_config::types::Tui;
 use codex_config::types::TuiKeymap;
 use codex_config::types::TuiNotificationSettings;
@@ -1262,6 +1263,7 @@ fn config_toml_deserializes_model_availability_nux() {
             vim_mode_default: false,
             question_esc_back: true,
             raw_output_mode: false,
+            tool_call_display: ToolCallDisplay::Compact,
             fullscreen_transcript: true,
             alternate_screen: AltScreenMode::default(),
             status_line: None,
@@ -1364,6 +1366,29 @@ async fn runtime_config_uses_tui_raw_output_mode() {
     .expect("load config");
 
     assert!(cfg.tui_raw_output_mode);
+}
+
+#[tokio::test]
+async fn runtime_config_uses_tui_tool_call_display() {
+    for (toml, expected) in [
+        ("", ToolCallDisplay::Compact),
+        ("[tui]", ToolCallDisplay::Compact),
+        ("[tui]\ntool_call_display = \"compact\"", ToolCallDisplay::Compact),
+        ("[tui]\ntool_call_display = \"preview\"", ToolCallDisplay::Preview),
+        ("[tui]\ntool_call_display = \"full\"", ToolCallDisplay::Full),
+    ] {
+        let cfg_toml: ConfigToml =
+            toml::from_str(toml).expect("deserialize tool_call_display");
+        let cfg = Config::load_from_base_config_with_overrides(
+            cfg_toml,
+            ConfigOverrides::default(),
+            tempdir().expect("tempdir").abs(),
+        )
+        .await
+        .expect("load config");
+
+        assert_eq!(cfg.tui_tool_call_display, expected, "toml: {toml}");
+    }
 }
 
 #[tokio::test]
@@ -4392,6 +4417,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
             vim_mode_default: false,
             question_esc_back: true,
             raw_output_mode: false,
+            tool_call_display: ToolCallDisplay::Compact,
             fullscreen_transcript: true,
             alternate_screen: AltScreenMode::Auto,
             status_line: None,

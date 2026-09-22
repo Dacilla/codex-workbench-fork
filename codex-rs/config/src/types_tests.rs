@@ -120,3 +120,17 @@ fn rendering_preferences_default_individually_and_ignore_animation_switch() {
         );
     }
 }
+
+#[test]
+fn tool_call_display_defaults_to_compact_and_parses_each_mode() {
+    for (source, expected) in [
+        ("", ToolCallDisplay::Compact),
+        ("tool_call_display = \"compact\"", ToolCallDisplay::Compact),
+        ("tool_call_display = \"preview\"", ToolCallDisplay::Preview),
+        ("tool_call_display = \"full\"", ToolCallDisplay::Full),
+    ] {
+        let tui: Tui = toml::from_str(source).expect("parse tool_call_display");
+        assert_eq!(tui.tool_call_display, expected);
+    }
+    assert!(toml::from_str::<Tui>("tool_call_display = \"verbose\"").is_err());
+}

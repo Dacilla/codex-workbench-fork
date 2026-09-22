@@ -59,6 +59,8 @@ use codex_app_server_protocol::WebSearchAction;
 #[cfg(test)]
 use codex_config::types::McpServerTransportConfig;
 #[cfg(test)]
+use codex_config::types::ToolCallDisplay;
+#[cfg(test)]
 use codex_mcp::qualified_mcp_tool_name_prefix;
 use codex_otel::RuntimeMetricsSummary;
 use codex_protocol::account::PlanType;

@@ -510,6 +510,7 @@ fn structured_tool_cell_renders_raw_plain_text_without_prefix_or_style() {
         "call-raw".to_string(),
         invocation,
         /*animations_enabled*/ false,
+        ToolCallDisplay::Full,
     );
     cell.complete(Duration::from_millis(1), Ok(result));
 
@@ -530,6 +531,7 @@ fn raw_mode_toggle_transcript_snapshot() {
             arguments: Some(json!({"path": "README.md"})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Full,
     );
     tool_cell.complete(
         Duration::from_millis(5),
@@ -1463,6 +1465,7 @@ fn active_mcp_tool_call_snapshot() {
         "call-1".into(),
         invocation,
         /*animations_enabled*/ true,
+        ToolCallDisplay::Full,
     );
     let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");
 
@@ -1483,6 +1486,7 @@ fn code_mode_tool_call_uses_title_and_preserves_full_transcript() {
             })),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Full,
     );
     cell.complete(
         Duration::ZERO,
@@ -1530,6 +1534,7 @@ fn code_mode_tool_call_preserves_failure_details() {
             arguments: Some(json!({"title": "Inspect workspace", "code": "throw Error('denied')"})),
         },
         /*animations_enabled*/ false,
+        ToolCallDisplay::Full,
     );
     cell.complete(
         Duration::ZERO,
@@ -1606,6 +1611,7 @@ fn completed_mcp_tool_call_success_snapshot() {
         "call-2".into(),
         invocation,
         /*animations_enabled*/ true,
+        ToolCallDisplay::Full,
     );
     cell.complete(Duration::from_millis(1420), Ok(result));
 
@@ -1638,6 +1644,7 @@ fn completed_mcp_tool_call_image_after_text_snapshot() {
         "call-image".into(),
         invocation,
         /*animations_enabled*/ true,
+        ToolCallDisplay::Full,
     );
     cell.complete(Duration::from_millis(25), Ok(result));
 
@@ -1667,6 +1674,7 @@ fn completed_mcp_tool_call_accepts_data_url_image_blocks() {
         "call-image-data-url".into(),
         invocation,
         /*animations_enabled*/ true,
+        ToolCallDisplay::Full,
     );
     cell.complete(Duration::from_millis(25), Ok(result));
 
@@ -1695,6 +1703,7 @@ fn completed_mcp_tool_call_multiple_image_blocks_snapshot() {
         "call-image-2".into(),
         invocation,
         /*animations_enabled*/ true,
+        ToolCallDisplay::Full,
     );
     cell.complete(Duration::from_millis(25), Ok(result));
 
@@ -1717,6 +1726,7 @@ fn completed_mcp_tool_call_error_snapshot() {
         "call-3".into(),
         invocation,
         /*animations_enabled*/ true,
+        ToolCallDisplay::Full,
     );
     cell.complete(Duration::from_secs(2), Err("network timeout".into()));
 
@@ -1757,6 +1767,7 @@ fn completed_mcp_tool_call_multiple_outputs_snapshot() {
         "call-4".into(),
         invocation,
         /*animations_enabled*/ true,
+        ToolCallDisplay::Full,
     );
     cell.complete(Duration::from_millis(640), Ok(result));
 
@@ -1789,6 +1800,7 @@ fn completed_mcp_tool_call_wrapped_outputs_snapshot() {
         "call-5".into(),
         invocation,
         /*animations_enabled*/ true,
+        ToolCallDisplay::Full,
     );
     cell.complete(Duration::from_millis(1280), Ok(result));
 
@@ -1822,6 +1834,7 @@ fn completed_mcp_tool_call_multiple_outputs_inline_snapshot() {
         "call-6".into(),
         invocation,
         /*animations_enabled*/ true,
+        ToolCallDisplay::Full,
     );
     cell.complete(Duration::from_millis(320), Ok(result));
 
