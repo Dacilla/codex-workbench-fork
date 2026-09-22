@@ -95,10 +95,13 @@ export function reduce(state: ConversationState, event: ExtensionEvent): Convers
     case "ext/item": {
       const items = [...state.items];
       const finalized: ChatItem = { itemId: event.itemId, turnId: event.turnId, kind: event.kind, text: clipText(event.text), status: "final", collapsed: isCollapsibleKind(event.kind) };
+      // Only agent-side content retires the "working" placeholder: backend
+      // echoes of our own message arrive well before generation starts.
+      const stillWaiting = event.kind === "userMessage" ? state.awaitingFirstToken : false;
       const index = items.findIndex((item) => item.itemId === event.itemId);
       if (index !== -1) {
         items[index] = finalized;
-        return { ...state, items: items.slice(-MAX_ITEMS), awaitingFirstToken: false };
+        return { ...state, items: items.slice(-MAX_ITEMS), awaitingFirstToken: stillWaiting };
       }
       // Adopt the optimistic local echo: the backend re-emits our sent
       // message as its own item, which would otherwise double-render.
@@ -106,15 +109,15 @@ export function reduce(state: ConversationState, event: ExtensionEvent): Convers
         const local = items.findIndex((item) => item.kind === "userMessage" && item.turnId === "local" && item.text === finalized.text);
         if (local !== -1) {
           items[local] = finalized;
-          return { ...state, items: items.slice(-MAX_ITEMS), awaitingFirstToken: false };
+          return { ...state, items: items.slice(-MAX_ITEMS), awaitingFirstToken: stillWaiting };
         }
       }
       items.push(finalized);
-      return { ...state, items: items.slice(-MAX_ITEMS), awaitingFirstToken: false };
+      return { ...state, items: items.slice(-MAX_ITEMS), awaitingFirstToken: stillWaiting };
     }
     case "ext/turnStatus": {
-      // Entering a turn arms the "working" placeholder; any content or a
-      // terminal status clears it.
+      // Entering a turn arms the "working" placeholder; agent-side content
+      // or a terminal status clears it (never our own message echo).
       const pending = event.status === "inProgress";
       return { ...state, turnStatus: event.status, activeTurnId: event.turnId, awaitingFirstToken: pending, error: event.status === "failed" ? state.error : null };
     }
