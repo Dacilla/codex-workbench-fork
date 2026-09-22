@@ -165,6 +165,17 @@ describe("conversation reducer", () => {
     state = reduce(state, { type: "ext/item", turnId: "t-1", itemId: "backend-2", kind: "agentMessage", text: "hello" });
     assert.equal(state.awaitingFirstToken, false);
   });
+
+  it("adopts echoes that include attachment mentions", () => {
+    // The local echo carries the exact sent text (mentions included); a
+    // bare-text echo could never match the backend echo and double-rendered.
+    const sent = "@file:///repo/AGENTS.md#L1-L321\nHow many lines do I have selected";
+    let state = initialState();
+    state = reduce(state, { type: "ext/item", turnId: "local", itemId: "local-1", kind: "userMessage", text: sent });
+    state = reduce(state, { type: "ext/item", turnId: "t-1", itemId: "backend-9", kind: "userMessage", text: sent });
+    assert.equal(state.items.length, 1);
+    assert.equal(state.items[0]?.itemId, "backend-9");
+  });
 });
 
 describe("IDE helpers", () => {

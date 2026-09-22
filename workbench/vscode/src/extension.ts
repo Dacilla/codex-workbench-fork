@@ -693,7 +693,7 @@ async function handleWebviewMessage(panelContext: PanelContext, type: string, pa
       const text = String(record["text"] ?? "");
       const mentions = Array.isArray(record["mentions"]) ? (record["mentions"] as string[]) : [];
       const fullText = mentions.length > 0 ? `${mentions.join(" ")}\n${text}` : text;
-      void panelContext.panel.webview.postMessage({ type: "ext/item", turnId: "local", itemId: `local-${Date.now()}`, kind: "userMessage", text });
+      void panelContext.panel.webview.postMessage({ type: "ext/item", turnId: "local", itemId: `local-${Date.now()}`, kind: "userMessage", text: fullText });
       try {
         // Apply this thread's stored model/effort pins (inherited defaults
         // included). Absent pins are omitted from the params — never null —
