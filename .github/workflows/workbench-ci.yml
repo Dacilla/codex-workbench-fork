@@ -68,6 +68,10 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # The Cargo workspace lives in codex-rs/, not at the repo root.
+        working-directory: codex-rs
     env:
       RUST_MIN_STACK: "8388608"
       NEXTEST_PROFILE: local
@@ -76,16 +80,21 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+      # Pin matches codex-rs/rust-toolchain.toml so cargo resolves to the same
+      # toolchain (with components) instead of a component-less override.
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
+          toolchain: 1.95.0
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
           key: workbench-tui
-      - name: Install just and nextest
-        uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+      - name: Install just (matches upstream pin)
+        uses: extractions/setup-just@v2
         with:
-          tool: just@1.51.0,nextest
+          just-version: 1.51.0
+      - name: Install nextest
+        run: cargo install cargo-nextest --locked
       - name: Formatting check (mirrors upstream flags)
         run: cargo fmt -- --config imports_granularity=Item --check
       - name: Clippy (TUI + touched config crates)
