@@ -3,8 +3,9 @@
  * Contents: package.json, out/ (extension host), media/ (webview bundle+css),
  * README, LICENSE notice. No binaries, no node_modules, no proprietary assets.
  *
- * Uses @vscode/vsce when available; falls back to a minimal PowerShell
- * Compress-Archive assembly on Windows (CI prefers vsce).
+ * Uses @vscode/vsce; fails closed when vsce is unavailable (CI installs it
+ * as a devDependency). No Compress-Archive fallback: hand-rolled zips risk
+ * shipping wrong layouts, so packaging refuses rather than guessing.
  */
 const { execSync } = require("child_process");
 const fs = require("fs");
