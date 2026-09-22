@@ -113,6 +113,9 @@ jobs:
   npm-pack-check:
     name: npm wrapper dry-run
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: workbench/packaging/npm
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -120,7 +123,9 @@ jobs:
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: "23"
-      - name: Verify packaging notes require binary reuse
-        run: |
-          test -f workbench/packaging/README.md
-          grep -q "same tested binary package" workbench/packaging/README.md
+      - name: Wrapper manifest check (no publish, no binaries needed)
+        run: npm pack --dry-run
+      - name: Launcher syntax check
+        run: node --check bin/codex-workbench.js
+      - name: Launcher fails closed without vendor binary
+        run: node bin/codex-workbench.js --version 2>&1 | grep -q "missing optional dependency"

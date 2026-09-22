@@ -1,0 +1,9 @@
+{
+  "name": "@YOUR_SCOPE/codex-workbench-linux-x64",
+  "version": "0.1.0",
+  "description": "Codex Workbench native binary package (Linux x64). Installed automatically as an optional dependency; do not install directly.",
+  "license": "Apache-2.0",
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "files": ["vendor"]
+}

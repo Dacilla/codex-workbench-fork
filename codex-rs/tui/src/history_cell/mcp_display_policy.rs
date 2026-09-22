@@ -57,9 +57,9 @@ pub(super) fn preview_args_summary(invocation: &McpInvocation) -> Option<String>
 fn preview_pair(key: &str, value: &serde_json::Value) -> String {
     let key = sanitize_preview_key(key);
     match value {
-        serde_json::Value::Number(_)
-        | serde_json::Value::Bool(_)
-        | serde_json::Value::Null => format!("{key}={value}"),
+        serde_json::Value::Number(_) | serde_json::Value::Bool(_) | serde_json::Value::Null => {
+            format!("{key}={value}")
+        }
         serde_json::Value::String(text) => {
             format!("{key}=<hidden: {} chars>", text.chars().count())
         }

@@ -175,7 +175,9 @@ pub(crate) fn thread_items_to_transcript_cells(
                     }
                 } else {
                     PendingActivity::flush(&mut pending, &mut cells);
-                    let display = config.map(|config| config.tui_tool_call_display).unwrap_or_default();
+                    let display = config
+                        .map(|config| config.tui_tool_call_display)
+                        .unwrap_or_default();
                     let cell = call.into_cell(display);
                     cells.push(Arc::new(cell));
                 }

@@ -211,9 +211,9 @@ impl McpToolCallCell {
         } else {
             match self.tool_call_display {
                 ToolCallDisplay::Full => line_to_static(&format_mcp_invocation(&self.invocation)),
-                ToolCallDisplay::Compact => Line::from(
-                    compact_invocation_text(&self.invocation).fg(accent_color()),
-                ),
+                ToolCallDisplay::Compact => {
+                    Line::from(compact_invocation_text(&self.invocation).fg(accent_color()))
+                }
                 ToolCallDisplay::Preview => match &self.preview_summary {
                     Some(summary) => Line::from(vec![
                         self.invocation.server.clone().fg(accent_color()),
@@ -223,9 +223,9 @@ impl McpToolCallCell {
                         summary.clone().dim(),
                         ")".into(),
                     ]),
-                    None => Line::from(
-                        compact_invocation_text(&self.invocation).fg(accent_color()),
-                    ),
+                    None => {
+                        Line::from(compact_invocation_text(&self.invocation).fg(accent_color()))
+                    }
                 },
             }
         };
