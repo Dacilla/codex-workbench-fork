@@ -22,6 +22,44 @@ permissions:
   contents: write
 
 jobs:
+  guard:
+    name: tag guards (branch, pin, naming)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify tag points at workbench/main with a matching pin
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          sha="$(git rev-list -n 1 "${tag}")"
+          # 1. Tagged commit must descend from the integration branch, so a tag
+          #    cut on pristine main/upstream-main can never package vanilla Codex.
+          git fetch origin workbench/main --depth 50
+          if ! git merge-base --is-ancestor "${sha}" origin/workbench/main; then
+            echo "::error::tag ${tag} (${sha}) is not a descendant of origin/workbench/main"
+            exit 1
+          fi
+          # 2. workbench/UPSTREAM_SHA must exist at the tag.
+          pin="$(git show "${sha}:workbench/UPSTREAM_SHA")"
+          if ! [[ "${pin}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::workbench/UPSTREAM_SHA missing or malformed at ${tag}"
+            exit 1
+          fi
+          # 3. Tag suffix +upstream.<sha> (full or short) must match the pin.
+          suffix="${tag##*+upstream.}"
+          if [[ "${suffix}" == "${tag}" ]]; then
+            echo "::error::tag ${tag} missing +upstream.<sha> suffix"
+            exit 1
+          fi
+          if [[ "${pin}" != "${suffix}"* ]]; then
+            echo "::error::tag suffix ${suffix} does not match pin ${pin}"
+            exit 1
+          fi
+          echo "tag=${tag} sha=${sha} pin=${pin}: guards pass"
+
   native:
     name: native package (${{ matrix.target }})
     strategy:
@@ -110,7 +148,7 @@ jobs:
 
   draft-release:
     name: draft GitHub release
-    needs: [native, vsix]
+    needs: [native, vsix, guard]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

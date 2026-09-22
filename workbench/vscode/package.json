@@ -21,8 +21,8 @@
   ],
   "capabilities": {
     "untrustedWorkspaces": {
-      "supported": true,
-      "description": "Reads only untrusted workspace metadata for file context; never executes tools without backend approval routing."
+      "supported": false,
+      "description": "Spawns a local Codex agent backend with the workspace as cwd and can start coding turns. Requires a trusted workspace until a limited-trust mode exists."
     }
   },
   "main": "./out/extension.js",

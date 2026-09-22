@@ -7,14 +7,17 @@
  * as a devDependency). No Compress-Archive fallback: hand-rolled zips risk
  * shipping wrong layouts, so packaging refuses rather than guessing.
  */
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
 
-function run(cmd) {
-  execSync(cmd, { cwd: ROOT, stdio: "inherit", shell: "powershell.exe" });
+function run(cmd, args) {
+  // No shell: portable across Windows dev machines and Linux CI runners
+  // (Ubuntu provides pwsh, not powershell.exe — the old hardcoded shell
+  // broke release packaging on Linux).
+  execFileSync(cmd, args, { cwd: ROOT, stdio: "inherit" });
 }
 
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
@@ -28,7 +31,11 @@ for (const dir of ["out", "media"]) {
 }
 
 try {
-  run(`npx vsce package --no-dependencies --out "${outFile}"`);
+  const vsceMain = path.join(ROOT, "node_modules", "@vscode", "vsce", "out", "main.js");
+  if (!fs.existsSync(vsceMain)) {
+    throw new Error("missing node_modules/@vscode/vsce (run npm ci)");
+  }
+  run(process.execPath, [vsceMain, "package", "--no-dependencies", "--out", outFile]);
   console.log(`package-vsix: OK via vsce: ${outFile}`);
 } catch (error) {
   console.error(`package-vsix: vsce failed (${error.message}); CI must install @vscode/vsce to package.`);
