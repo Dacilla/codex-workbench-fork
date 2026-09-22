@@ -142,5 +142,5 @@ export function reduce(state: ConversationState, event: ExtensionEvent): Convers
 }
 
 function isCollapsibleKind(kind: string): boolean {
-  return kind === "commandExecution" || kind === "fileChange" || kind === "reasoning" || kind === "mcpCall" || kind === "plan";
+  return kind === "commandExecution" || kind === "fileChange" || kind === "reasoning" || kind === "mcpToolCall" || kind === "plan" || kind === "unsupported";
 }

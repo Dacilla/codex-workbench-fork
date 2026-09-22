@@ -21,6 +21,7 @@
     "src/sessions/**/*.ts",
     "src/ide/**/*.ts",
     "src/webview/protocol.ts",
+    "src/webview/normalize.ts",
     "src/webview/state.ts",
     "src/test/**/*.ts"
   ],
