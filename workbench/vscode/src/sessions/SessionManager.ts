@@ -54,6 +54,7 @@ export class SessionManager {
   private transport: JsonRpcTransport | null = null;
   private approvals: ApprovalHandler | null = null;
   private state: ConnectionState = "stopped";
+  private lastDetail = "stopped";
   private handshake: HandshakeResult | null = null;
   private readonly events: SessionManagerEvents;
   private readonly approvalEvents: ApprovalHandlerEvents;
@@ -273,6 +274,16 @@ export class SessionManager {
 
   private setState(state: ConnectionState, detail: string): void {
     this.state = state;
+    this.lastDetail = detail;
     this.events.onConnectionState?.(state, detail);
+  }
+
+  /**
+   * Current connection snapshot for late-joining webviews: ready broadcasts
+   * fire while the webview is still loading and are lost, leaving the header
+   * stuck at "connecting". Replayed on webview/ready.
+   */
+  connectionSnapshot(): { state: ConnectionState; detail: string } {
+    return { state: this.state, detail: this.lastDetail };
   }
 }
