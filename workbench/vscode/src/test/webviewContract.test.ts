@@ -139,6 +139,18 @@ describe("conversation reducer", () => {
     state = reduce(state, { type: "ext/mcpStatus", server: "", status: "connected", hasError: false });
     assert.equal(Object.keys(state.mcp).length, 2, "empty server names ignored");
   });
+
+  it("arms a first-token placeholder on turn start, clears on content", () => {
+    let state = initialState();
+    assert.equal(state.awaitingFirstToken, false);
+    state = reduce(state, { type: "ext/turnStatus", turnId: "t-1", status: "inProgress" });
+    assert.equal(state.awaitingFirstToken, true);
+    state = reduce(state, { type: "ext/delta", turnId: "t-1", itemId: "i-1", kind: "agentMessage", delta: "hi" });
+    assert.equal(state.awaitingFirstToken, false);
+    state = reduce(state, { type: "ext/turnStatus", turnId: "t-2", status: "inProgress" });
+    state = reduce(state, { type: "ext/turnStatus", turnId: "t-2", status: "completed" });
+    assert.equal(state.awaitingFirstToken, false, "terminal status clears the placeholder");
+  });
 });
 
 describe("IDE helpers", () => {

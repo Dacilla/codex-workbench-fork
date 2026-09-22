@@ -105,6 +105,24 @@
 .wb-composer-row { margin-top: 4px; }
 .wb-context { font-size: 11px; opacity: 0.8; margin-bottom: 4px; }
 .wb-empty { opacity: 0.85; }
+.wb-pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  opacity: 0.85;
+}
+.wb-pending-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vscode-progressBar-background, var(--vscode-textLink-foreground));
+  animation: wb-pulse 1.2s ease-in-out infinite;
+}
+@keyframes wb-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
 .wb-session { display: block; width: 100%; text-align: left; margin: 4px 0; }
 .wb-session-name { font-weight: bold; display: block; }
 .wb-session-preview { font-size: 12px; opacity: 0.8; display: block; }
