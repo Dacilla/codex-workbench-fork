@@ -87,14 +87,39 @@ describe("ApprovalHandler exactly-once + fail-closed", () => {
     assert.deepEqual(settled, [true]);
   });
 
-  it("approving a permissions request without grants fails closed", () => {
-    const { transport, sent } = stubTransport();
+  it("approving a permissions request without grants fails closed", () => {    const { transport, sent } = stubTransport();
     const settled: Array<{ approved: boolean; failClosed: boolean }> = [];
     const handler = new ApprovalHandler(transport, { onApprovalSettled: (_approval, approved, failClosed) => settled.push({ approved, failClosed }) }, 0);
     handler.handleServerRequest({ id: "a-4", method: "item/permissions/requestApproval", params: { threadId: "t-1", turnId: "turn-1", itemId: "item-1" } });
     assert.equal(handler.decide("a-4", { approved: true }), true);
     assert.deepEqual(sent[0]?.result, { permissions: {}, scope: "turn" });
     assert.deepEqual(settled, [{ approved: false, failClosed: true }]);
+  });
+
+  it("user-input answers ride the existing decide channel exactly once", () => {
+    // Pure-shape coverage for the host approval/answer path: extension.ts
+    // calls manager.decideApproval(requestId, { approved: true,
+    // result: { answers } }), which delegates to this decide call.
+    const { transport, sent } = stubTransport();
+    const settled: Array<{ approved: boolean; failClosed: boolean }> = [];
+    const handler = new ApprovalHandler(transport, { onApprovalSettled: (_approval, approved, failClosed) => settled.push({ approved, failClosed }) }, 0);
+    handler.handleServerRequest({
+      id: "a-user",
+      method: "item/tool/requestUserInput",
+      params: {
+        threadId: "t-1",
+        turnId: "turn-1",
+        itemId: "item-1",
+        isBlocking: true,
+        questions: [{ id: "q-1", header: "Color", question: "Pick?", isOther: false, isSecret: false, options: [{ label: "Red", description: "" }] }],
+      },
+    });
+    const answers = { "q-1": { answers: ["Red"] } };
+    assert.equal(handler.decide("a-user", { approved: true, result: { answers } }), true);
+    assert.equal(handler.decide("a-user", { approved: true, result: { answers } }), false, "second answer rejected");
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0]?.result, { answers });
+    assert.deepEqual(settled, [{ approved: true, failClosed: false }]);
   });
 
   it("failClosedForThread only settles the disposed thread", () => {

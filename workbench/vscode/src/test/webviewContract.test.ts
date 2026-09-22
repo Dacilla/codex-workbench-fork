@@ -1,9 +1,11 @@
 /** Unit tests: webview message validation, sanitization, reducer, IDE helpers. */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { escapeHtml, sanitizeLinkUrl, validateWebviewMessage } from "../webview/protocol";
+import { escapeHtml, extractUserInputQuestions, sanitizeLinkUrl, validateUserInputAnswers, validateWebviewMessage } from "../webview/protocol";
+import { approvalCardHtml } from "../webview/Approval";
 import { renderSafeText } from "../webview/Conversation";
 import { initialState, reduce } from "../webview/state";
+import type { ApprovalCard } from "../webview/state";
 import { toolCardHtml } from "../webview/ToolActivity";
 import { isRemoteUri, referenceFromEditorContext, renderReferenceAsMention } from "../ide/UriContext";
 import { diffCandidateFor } from "../ide/DiffProvider";
@@ -183,5 +185,143 @@ describe("IDE helpers", () => {
     assert.equal(diffCandidateFor("w", {}), null);
     const candidate = diffCandidateFor("vscode-remote://h/work", { path: "src/a.ts" });
     assert.ok(candidate !== null && candidate.uri.includes("src/a.ts"));
+  });
+});
+
+function userInputParams(): Record<string, unknown> {
+  return {
+    threadId: "t-1",
+    turnId: "turn-1",
+    itemId: "item-1",
+    isBlocking: true,
+    questions: [
+      { id: "q-color", header: "Color", question: "Pick a color?", isOther: false, isSecret: false, options: [{ label: "Red", description: "warm" }, { label: "Blue", description: "" }] },
+      { id: "q-secret", header: "Token", question: "Paste the token?", isOther: false, isSecret: true, options: [{ label: "x", description: "" }] },
+      { id: "q-other", header: "Editor", question: "Which editor?", isOther: true, isSecret: false, options: null },
+    ],
+  };
+}
+
+function cardFor(kind: string, questions: ApprovalCard["questions"] = null): ApprovalCard {
+  return { requestId: "r-1", method: `method/${kind}`, kind, summary: "s", questions, settled: false, approved: null, failClosed: false };
+}
+
+describe("approval/answer validation", () => {
+  it("accepts well-formed answers", () => {
+    const answers = { "q-1": { answers: ["Red"] }, "q-2": { answers: ["s3cret"] } };
+    assert.deepEqual(validateUserInputAnswers(answers), answers);
+    assert.deepEqual(validateWebviewMessage({ type: "approval/answer", payload: { requestId: "r-1", answers } }), {
+      type: "approval/answer",
+      payload: { requestId: "r-1", answers },
+    });
+  });
+
+  it("rejects oversized and malformed answers", () => {
+    assert.equal(validateUserInputAnswers({}), null, "empty map answers nothing");
+    assert.equal(validateUserInputAnswers({ "q": { answers: [] } }), null, "empty value answers nothing");
+    assert.equal(validateUserInputAnswers({ "q": { answers: [""] } }), null, "empty string is not an answer");
+    assert.equal(validateUserInputAnswers({ "q": { answers: ["x".repeat(5 * 1024)] } }), null, "value over 4 KiB");
+    assert.equal(validateUserInputAnswers({ "q": { answers: [42] } }), null, "non-string value");
+    assert.equal(validateUserInputAnswers({ "": { answers: ["a"] } }), null, "empty question id");
+    const tooMany: Record<string, { answers: string[] }> = {};
+    for (let index = 0; index < 21; index += 1) {
+      tooMany[`q-${index}`] = { answers: ["a"] };
+    }
+    assert.equal(validateUserInputAnswers(tooMany), null, "over 20 questions");
+    assert.equal(validateWebviewMessage({ type: "approval/answer", payload: { requestId: "r-1", answers: tooMany } }), null);
+    assert.equal(validateWebviewMessage({ type: "approval/answer", payload: { requestId: null, answers: { q: { answers: ["a"] } } } }), null);
+    assert.equal(validateWebviewMessage({ type: "approval/answer", payload: { requestId: "r-1" } }), null);
+  });
+});
+
+describe("user-input question extraction", () => {
+  it("extracts bounded views from generated params shape", () => {
+    const views = extractUserInputQuestions(userInputParams());
+    assert.equal(views?.length, 3);
+    assert.deepEqual(views?.[0], {
+      id: "q-color",
+      header: "Color",
+      question: "Pick a color?",
+      isOther: false,
+      isSecret: false,
+      options: [{ label: "Red", description: "warm" }, { label: "Blue", description: "" }],
+    });
+    assert.equal(views?.[1]?.isSecret, true);
+    assert.equal(views?.[2]?.options, null);
+  });
+
+  it("falls back to null on empty or malformed questions, never fabricates", () => {
+    assert.equal(extractUserInputQuestions({ questions: [] }), null);
+    assert.equal(extractUserInputQuestions({}), null);
+    assert.equal(extractUserInputQuestions(null), null);
+    assert.equal(extractUserInputQuestions({ questions: [{ nope: true }] }), null);
+    assert.equal(extractUserInputQuestions({ questions: "pick one" }), null);
+  });
+});
+
+describe("approval reducer per kind", () => {
+  it("stores kind and questions; unknown kind when missing", () => {
+    let state = initialState();
+    const views = extractUserInputQuestions(userInputParams());
+    state = reduce(state, { type: "ext/approval", requestId: "r-1", method: "item/tool/requestUserInput", summary: "s", kind: "userInput", questions: views });
+    assert.equal(state.approvals[0]?.kind, "userInput");
+    assert.equal(state.approvals[0]?.questions?.length, 3);
+    state = reduce(state, { type: "ext/approval", requestId: "r-2", method: "m", summary: "s" });
+    assert.equal(state.approvals[1]?.kind, "unknown", "missing kind fails closed");
+    assert.equal(state.approvals[1]?.questions, null);
+  });
+});
+
+describe("approval card per kind", () => {
+  it("offers Approve/Deny for executable kinds", () => {
+    for (const kind of ["commandExecution", "fileChange", "v1ApplyPatch", "v1ExecCommand", "elicitation"]) {
+      const html = approvalCardHtml(cardFor(kind));
+      assert.ok(html.includes("data-action=\"approve\""), `${kind} has Approve`);
+      assert.ok(html.includes("data-action=\"deny\""), `${kind} has Deny`);
+    }
+  });
+
+  it("is Deny-only with an honest reason for permissions/dynamicTool/unknown", () => {
+    const permissions = approvalCardHtml(cardFor("permissions"));
+    assert.ok(!permissions.includes("data-action=\"approve\""), "permissions has no Approve");
+    assert.ok(permissions.includes("data-action=\"deny\""));
+    assert.ok(permissions.includes("grant profiles aren&#39;t supported in this client yet"));
+    const dynamic = approvalCardHtml(cardFor("dynamicTool"));
+    assert.ok(!dynamic.includes("data-action=\"approve\""));
+    assert.ok(dynamic.includes("unsupported request type"));
+    const unknown = approvalCardHtml(cardFor("unknown"));
+    assert.ok(!unknown.includes("data-action=\"approve\""));
+    assert.ok(unknown.includes("unsupported request type"));
+  });
+
+  it("renders questions with radios, password for secrets, free text for other", () => {
+    const views = extractUserInputQuestions(userInputParams());
+    const html = approvalCardHtml(cardFor("userInput", views));
+    assert.ok(!html.includes("data-action=\"approve\""), "userInput has no Approve");
+    assert.ok(html.includes("data-action=\"deny\""));
+    assert.ok(html.includes("Pick a color?"));
+    assert.ok(html.includes('type="radio"'), "options as radio list");
+    assert.ok(html.includes("Red"));
+    assert.ok(html.includes('type="password"'), "secret uses password input");
+    assert.ok(html.includes('data-role="other-answer"'), "isOther appends free-text field");
+    assert.equal((html.match(/data-action="answer"/g) ?? []).length, 3, "one Answer control per question");
+  });
+
+  it("falls back to Deny-only when questions are missing", () => {
+    const html = approvalCardHtml(cardFor("userInput", null));
+    assert.ok(!html.includes("data-action=\"approve\""));
+    assert.ok(!html.includes("data-action=\"answer\""));
+    assert.ok(html.includes("data-action=\"deny\""));
+    assert.ok(html.includes("empty or malformed"));
+  });
+
+  it("escapes rendered question text and options", () => {
+    const views = extractUserInputQuestions({
+      questions: [{ id: "q", header: "<b>H</b>", question: "<img src=x onerror=alert(1)>", isOther: false, isSecret: false, options: [{ label: "<script>evil</script>", description: "" }] }],
+    });
+    const html = approvalCardHtml(cardFor("userInput", views));
+    assert.ok(!html.includes("<img src=x"), "question text escaped");
+    assert.ok(!html.includes("<script>evil</script>"), "option label escaped");
+    assert.ok(html.includes("&lt;img src=x"), "escaped form present");
   });
 });

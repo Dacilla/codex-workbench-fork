@@ -115,6 +115,28 @@ window.addEventListener("message", (event: MessageEvent) => {
   }
 });
 
+/**
+ * Read the user's answer for one question block. Returns the single chosen
+ * value or null when nothing usable is entered (the card stays active).
+ * Secret inputs are read as-is (never trimmed, never logged); free text
+ * wins over a checked radio when both are set (explicit typing is the
+ * stronger signal). Free text is only read when the field exists, i.e.
+ * isOther or no options — matching what the card rendered.
+ */
+function collectAnswer(container: Element): string | null {
+  const secret = container.querySelector('input[data-role="secret-answer"]') as HTMLInputElement | null;
+  if (secret !== null) {
+    return secret.value === "" ? null : secret.value;
+  }
+  const other = container.querySelector('input[data-role="other-answer"]') as HTMLInputElement | null;
+  if (other !== null && other.value.trim() !== "") {
+    return other.value.trim();
+  }
+  const checked = container.querySelector('input[type="radio"]:checked') as HTMLInputElement | null;
+  const label = checked?.getAttribute("data-label") ?? "";
+  return label === "" ? null : label;
+}
+
 document.addEventListener("click", (event: Event) => {
   const target = event.target as HTMLElement | null;
   const button = target?.closest("button") as HTMLButtonElement | null;
@@ -139,6 +161,24 @@ document.addEventListener("click", (event: Event) => {
       other.disabled = true;
     });
     post("approval/decide", { requestId, approved: action === "approve" });
+    return;
+  }
+  if (action === "answer" && button.dataset["requestId"] !== undefined) {
+    const requestId = button.dataset["requestId"] as string;
+    if (decidedRequests.has(requestId)) {
+      return; // Same single-shot guard as approve/deny (extended, not duplicated).
+    }
+    const container = button.closest("[data-question-id]");
+    const questionId = container?.getAttribute("data-question-id") ?? "";
+    const answer = container !== null ? collectAnswer(container) : null;
+    if (questionId === "" || answer === null) {
+      return; // Incomplete: leave the card active, decide nothing.
+    }
+    decidedRequests.add(requestId);
+    button.closest(".wb-approval")?.querySelectorAll("button").forEach((other) => {
+      other.disabled = true;
+    });
+    post("approval/answer", { requestId, answers: { [questionId]: { answers: [answer] } } });
     return;
   }
   if (action === "pick" && button.dataset["threadId"] !== undefined) {

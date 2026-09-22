@@ -7,6 +7,8 @@
  * resume re-hydration never duplicates streamed text (spec 4.3).
  */
 
+import type { UserInputQuestionView } from "./protocol.js";
+
 export interface ChatItem {
   itemId: string;
   turnId: string;
@@ -19,7 +21,18 @@ export interface ChatItem {
 export interface ApprovalCard {
   requestId: string | number;
   method: string;
+  /**
+   * Approval kind per `classifyApproval` in `src/sessions/Approvals.ts`
+   * (forwarded by the host). Missing/unknown kinds render Deny-only:
+   * fail closed rather than offer an Approve that cannot succeed.
+   */
+  kind: string;
   summary: string;
+  /**
+   * Bounded question views for `userInput` cards (null for other kinds, or
+   * when the questions array was empty/malformed — Deny-only fallback).
+   */
+  questions: UserInputQuestionView[] | null;
   settled: boolean;
   approved: boolean | null;
   failClosed: boolean;
@@ -58,7 +71,7 @@ export type ExtensionEvent =
   | { type: "ext/delta"; turnId: string; itemId: string; kind: string; delta: string }
   | { type: "ext/item"; turnId: string; itemId: string; kind: string; text: string }
   | { type: "ext/turnStatus"; turnId: string | null; status: string }
-  | { type: "ext/approval"; requestId: string | number; method: string; summary: string }
+  | { type: "ext/approval"; requestId: string | number; method: string; summary: string; kind?: string; questions?: UserInputQuestionView[] | null }
   | { type: "ext/approvalSettled"; requestId: string | number; approved: boolean; failClosed: boolean }
   | { type: "ext/error"; message: string }
   | { type: "ext/connection"; state: string; detail: string; droppedEvents?: number }
@@ -125,7 +138,13 @@ export function reduce(state: ConversationState, event: ExtensionEvent): Convers
       if (state.approvals.some((card) => String(card.requestId) === String(event.requestId))) {
         return state;
       }
-      return { ...state, approvals: [...state.approvals, { requestId: event.requestId, method: event.method, summary: event.summary, settled: false, approved: null, failClosed: false }] };
+      // Fail closed on shape: an unknown/missing kind offers no Approve, and
+      // questions are kept only when structurally sound (the card falls back
+      // to Deny-only otherwise). Lengths are already clipped by the host
+      // extractor; re-slice here so direct reducer input cannot grow state.
+      const kind = typeof event.kind === "string" && event.kind !== "" ? event.kind : "unknown";
+      const questions = kind === "userInput" && Array.isArray(event.questions) && event.questions.length > 0 ? event.questions.slice(0, 20) : null;
+      return { ...state, approvals: [...state.approvals, { requestId: event.requestId, method: event.method, kind, summary: event.summary, questions, settled: false, approved: null, failClosed: false }] };
     }
     case "ext/approvalSettled": {
       return {

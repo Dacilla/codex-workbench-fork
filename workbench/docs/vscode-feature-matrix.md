@@ -76,6 +76,16 @@ turn that requests approval; opt-in steps provided). Decision timeout,
 double-send rejection, orphaned-prompt decline, and crash settlement are
 LIVE-FAKE.
 
+VS Code approval-card support per kind (unit-tested validator/reducer/render;
+live interactive click-through UNTESTED for every kind):
+
+| Kind | Card offers | Notes |
+|---|---|---|
+| `commandExecution`, `fileChange`, `applyPatchApproval`, `execCommandApproval`, `elicitation` | Approve / Deny | unchanged; existing `approveResult` shapes |
+| `permissions` | Deny only ("grant profiles aren't supported in this client yet") | Approve would fail closed into a silent deny, so no Approve button |
+| `item/tool/call` (dynamic tool), unknown | Deny only ("unsupported request type") | never executes; unknown has no safe wire shape |
+| `item/tool/requestUserInput` | Per-question Answer + Deny | radios / password for `isSecret` / free text for `isOther`; answers ride `approval/answer` → `decideApproval(approved: true, result: {answers})` bounded to ≤20 questions, values ≤4 KiB; empty/malformed question lists fall back to Deny-only (no fabricated answers) |
+
 ## Models / account (LIVE-OFFICIAL read-only)
 
 - `model/list` `{}` → `{data: [{id, model, displayName, …, supportedReasoningEfforts}]}` (LIVE-OFFICIAL).
