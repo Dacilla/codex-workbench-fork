@@ -34,6 +34,16 @@ describe("handshake", () => {
     const transport = (manager as unknown as { transport: { request: (method: string, params: unknown) => Promise<unknown> } }).transport;
     await assert.rejects(transport.request("nope/method", {}), (error: unknown) => error instanceof RpcError && error.code === -32601);
   });
+
+  it("connection snapshot replays latest state for late webviews", () => {
+    // A fresh manager reports its initial state; a connected one replays the
+    // ready detail so a webview that loaded late stops showing "connecting".
+    const fresh = new SessionManager();
+    assert.deepEqual(fresh.connectionSnapshot(), { state: "stopped", detail: "stopped" });
+    const snapshot = manager.connectionSnapshot();
+    assert.equal(snapshot.state, "ready");
+    assert.match(snapshot.detail, /codex-workbench-fake/);
+  });
 });
 
 describe("two-thread routing", () => {

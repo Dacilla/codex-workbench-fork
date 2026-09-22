@@ -664,6 +664,12 @@ async function handleWebviewMessage(panelContext: PanelContext, type: string, pa
       void panelContext.panel.webview.postMessage({ type: "ext/mentions", mentions: panelContext.mentions });
       // The webview is recreated whenever a hidden tab is reshown
       // (retainContextWhenHidden: false), so re-send header state here.
+      // Connection state especially: the ready broadcast fired while this
+      // webview was still loading and was lost.
+      if (manager !== null) {
+        const snapshot = manager.connectionSnapshot();
+        void panelContext.panel.webview.postMessage({ type: "ext/connection", state: snapshot.state, detail: snapshot.detail });
+      }
       postModelState(panelContext);
       break;
     case "composer/send": {
