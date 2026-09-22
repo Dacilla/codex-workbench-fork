@@ -182,9 +182,11 @@ function normalizeCommandExecution(item: Record<string, unknown>, id: string, tu
   const command = truncate(collapseToOneLine(item["command"] as string), MAX_SNIPPET);
   const status = typeof item["status"] === "string" ? (item["status"] as string) : "unknown";
   const view: ViewItem = { id, turnId, kind: "commandExecution", text: `${command} · ${status}` };
-  // Head-truncated: bounded preview of the aggregated stdout/stderr blob.
+  // Tail-truncated: the last lines of terminal output are the most useful;
+  // head would bury the result under scrollback.
   if (nonBlank(item["aggregatedOutput"])) {
-    view.detail = truncate(item["aggregatedOutput"] as string, MAX_SNIPPET);
+    const output = item["aggregatedOutput"] as string;
+    view.detail = output.length > MAX_SNIPPET ? `…${output.slice(-MAX_SNIPPET)}` : output;
   }
   return view;
 }

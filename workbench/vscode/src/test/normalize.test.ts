@@ -78,7 +78,7 @@ describe("normalizeThreadItem", () => {
         source: "model",
         status: "completed",
         commandActions: [],
-        aggregatedOutput: "ok\n".repeat(1000),
+        aggregatedOutput: Array.from({ length: 1000 }, (_, i) => `line ${i}`).join("\n"),
         exitCode: 0,
         durationMs: 12,
       },
@@ -87,6 +87,7 @@ describe("normalizeThreadItem", () => {
     assert.equal(view?.kind, "commandExecution");
     assert.equal(view?.text, "npm test · completed");
     assert.ok((view?.detail?.length ?? 0) <= 501, "output preview stays bounded");
+    assert.ok((view?.detail ?? "").endsWith("line 999"), "tail kept, not head");
     assert.equal(normalizeThreadItem({ type: "commandExecution", id: "c", command: "", status: "completed" }, "t"), null);
   });
 
