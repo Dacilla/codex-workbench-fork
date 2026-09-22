@@ -30,6 +30,29 @@
   background: var(--vscode-textCodeBlock-background);
   padding: 0 3px;
 }
+.wb-codeblock {
+  background: var(--vscode-textCodeBlock-background);
+  border: 1px solid var(--vscode-panel-border);
+  margin: 8px 0;
+  max-width: 100%;
+}
+.wb-codeblock-lang {
+  font-size: 11px;
+  opacity: 0.7;
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  user-select: none;
+}
+.wb-codeblock pre {
+  margin: 0;
+  padding: 8px;
+  overflow-x: auto;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size, 12px);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .wb-tool {
   border: 1px solid var(--vscode-panel-border);
   margin: 6px 0;

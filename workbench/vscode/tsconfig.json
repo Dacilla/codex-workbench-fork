@@ -3,7 +3,9 @@
     "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "node",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "outDir": "out",
     "rootDir": "src",
     "strict": true,
@@ -13,7 +15,9 @@
     "forceConsistentCasingInFileNames": true,
     "declaration": false,
     "sourceMap": false,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "src/extension.ts",
@@ -21,9 +25,16 @@
     "src/sessions/**/*.ts",
     "src/ide/**/*.ts",
     "src/webview/protocol.ts",
+    "src/webview/Conversation.ts",
     "src/webview/normalize.ts",
     "src/webview/state.ts",
     "src/test/**/*.ts"
   ],
-  "exclude": ["src/webview/main.ts", "src/webview/Conversation.ts", "src/webview/Composer.ts", "src/webview/ToolActivity.ts", "src/webview/Approval.ts", "src/webview/SessionPicker.ts"]
+  "exclude": [
+    "src/webview/main.ts",
+    "src/webview/Composer.ts",
+    "src/webview/ToolActivity.ts",
+    "src/webview/Approval.ts",
+    "src/webview/SessionPicker.ts"
+  ]
 }
