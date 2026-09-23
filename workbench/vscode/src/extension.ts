@@ -107,6 +107,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("codexWorkbench.reconnectBackend", () => void reconnect()),
     vscode.commands.registerCommand("codexWorkbench.showLogs", () => outputChannel?.show()),
     vscode.commands.registerCommand("codexWorkbench.attachSelection", () => void attachSelection()),
+    vscode.commands.registerCommand("codexWorkbench.allowWritesAnyway", () => void allowWritesAnyway()),
     vscode.commands.registerCommand("codexWorkbench.selectModel", () => void selectModel()),
     vscode.commands.registerCommand("codexWorkbench.selectEffort", () => void selectEffort()),
     vscode.commands.registerCommand("codexWorkbench.selectMode", () => void selectMode()),
@@ -164,9 +165,12 @@ async function doConnect(silent: boolean): Promise<boolean> {
     return false;
   }
   let executable: string;
+  let backendSource: "explicit-setting" | "path-workbench" | "path-official" | "well-known-dir" | undefined;
   try {
     const explicit = config<string>(EXECUTABLE_PATH_KEY) ?? "";
-    executable = discoverBackend(explicit).executable;
+    const discovered = discoverBackend(explicit);
+    executable = discovered.executable;
+    backendSource = discovered.source;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!silent) {
@@ -183,7 +187,19 @@ async function doConnect(silent: boolean): Promise<boolean> {
     // (see sessions/CollaborationMode.ts). Opting in only *permits*
     // experimental methods; the client still calls exactly the methods it
     // calls, so stable behavior is unchanged.
-    await manager.connect(executable, backendSpawnArgs(), { cwd, experimentalApi: true });
+    await manager.connect(executable, backendSpawnArgs(), { cwd, experimentalApi: true, backendSource });
+    const policy = manager.writePolicySnapshot;
+    if (policy.mode === "gated" && !silent) {
+      const action = "Allow Writes Anyway (Session)";
+      const picked = await vscode.window.showWarningMessage(
+        `Codex Workbench: ${policy.reason} Select '${action}' to enable turns for this session only.`,
+        action,
+      );
+      if (picked === action) {
+        manager.allowWritesAnyway();
+        log("writes allowed by explicit session override");
+      }
+    }
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -193,6 +209,14 @@ async function doConnect(silent: boolean): Promise<boolean> {
     log(`connect failed: ${message}`);
     return false;
   }
+}
+
+async function allowWritesAnyway(): Promise<void> {
+  if (manager === null) {
+    return;
+  }
+  manager.allowWritesAnyway();
+  log("writes allowed by explicit session override (command)");
 }
 
 async function reconnect(): Promise<void> {

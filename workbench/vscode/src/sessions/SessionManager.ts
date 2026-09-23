@@ -13,6 +13,7 @@
  */
 
 import { JsonRpcTransport } from "../backend/JsonRpcTransport";
+import { BackendSource, BackendWritePolicy, classifyBackendWritePolicy } from "../backend/BackendPolicy";
 import { ProcessManager } from "../backend/ProcessManager";
 import { HandshakeResult, performHandshake } from "../backend/ProtocolVersion";
 import { ApprovalHandler, ApprovalHandlerEvents } from "./Approvals";
@@ -74,6 +75,8 @@ export class SessionManager {
   private state: ConnectionState = "stopped";
   private lastDetail = "stopped";
   private handshake: HandshakeResult | null = null;
+  private writePolicy: BackendWritePolicy = { mode: "full" };
+  private writesOverridden = false;
   private readonly events: SessionManagerEvents;
   private readonly approvalEvents: ApprovalHandlerEvents;
 
@@ -105,7 +108,11 @@ export class SessionManager {
   }
 
   /** Spawn + handshake. The caller resolved `executable` via BackendDiscovery on this host. */
-  async connect(executable: string, argv: string[], options: { cwd?: string; experimentalApi?: boolean } = {}): Promise<HandshakeResult> {
+  async connect(
+    executable: string,
+    argv: string[],
+    options: { cwd?: string; experimentalApi?: boolean; backendSource?: BackendSource } = {},
+  ): Promise<HandshakeResult> {
     if (this.state === "starting") {
       throw new Error("backend connection already in progress");
     }
@@ -127,8 +134,26 @@ export class SessionManager {
       throw error;
     }
     this.setState("ready", `connected to ${this.handshake.response.userAgent}`);
+    this.writePolicy = classifyBackendWritePolicy({ source: options.backendSource, userAgent: this.handshake.response.userAgent });
+    this.writesOverridden = false;
+    if (this.writePolicy.mode === "gated") {
+      this.events.onConnectionState?.("ready", `${this.lastDetail} — ${this.writePolicy.reason}`);
+    }
     this.events.onHandshake?.(this.handshake);
     return this.handshake;
+  }
+
+  /** Current write policy (reads always work; turns may be gated). */
+  get writePolicySnapshot(): BackendWritePolicy {
+    return this.writePolicy;
+  }
+
+  /**
+   * Session-only override for gated backends: re-affirmed every reconnect,
+   * never persisted. Reads are unaffected either way.
+   */
+  allowWritesAnyway(): void {
+    this.writesOverridden = true;
   }
 
   async disconnect(reason: string): Promise<void> {
@@ -252,6 +277,11 @@ export class SessionManager {
 
   async startTurn(threadId: string, text: string, options: TurnOptions = {}): Promise<Record<string, unknown>> {
     const transport = this.requireTransport();
+    if (this.writePolicy.mode === "gated" && !this.writesOverridden) {
+      throw new Error(
+        `${this.writePolicy.reason} Run the 'Codex Workbench: Allow Writes Anyway (Session)' command to enable turns for this session only.`,
+      );
+    }
     const params: Record<string, unknown> = {
       threadId,
       input: [{ type: "text", text, text_elements: [] }],
