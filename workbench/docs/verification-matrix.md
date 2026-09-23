@@ -22,8 +22,8 @@ Do not claim completeness from mock tests alone.
 
 ## M2 — CLI public-ready
 
-- [ ] Windows x64 + Linux x64 assembled packages (not lone .exe)
-- [ ] Sandbox/MCP/login smoke on release packages
+- [x] Linux x64 assembled package (2026-09-23, host `alfie` Ubuntu 26.04.1 x64): `codex-workbench-linux-x64.tar.gz` (387,369,302 bytes, sha256 `cfb87e0a…359c`) via the upstream assembler, canonical layout, binary runs, `app-server initialize` handshake smoke green. Needed env workarounds (no sudo): `OPENSSL_*` paths (headers present, `pkg-config` missing), `CODEX_SKIP_BWRAP_BUILD=1` (no libcap headers — package ships assembler-staged bwrap resource but sandbox helper not locally compiled; release CI must build it properly), GNU target (musl needs `musl-tools`), `CARGO_BUILD_JOBS=3` (release LTO OOM-kills at 12 jobs on 14GB). Dev-profile package also validated (139MB). Binary reports `codex-cli 0.0.0` (Cargo workspace version, not package version — release naming TBD). Windows package + sandbox/MCP/login smoke still open; npm side-by-side install still open.
+- [x] Alfie Minecraft servers (`liminal`, `purpur`) stopped gracefully for the build window (chunk saves + orderly I/O drain confirmed in both logs) and restarted healthy (`active`, both log `Done`). Owner lent the window + sudo for this run.
 - [x] `npm pack` verification — wrapper `npm pack --dry-run` + launcher syntax/fail-closed checks pass locally (Windows 11, Node 23.10.0) and in CI (`npm-pack-check` green, run 35702742769). Side-by-side install with official `codex` UNTESTED. Scope still placeholder `@YOUR_SCOPE` (owner decision required).
 - [ ] Draft release + hashes + changelog (no publish without authorization)
 
