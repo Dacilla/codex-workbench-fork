@@ -18,7 +18,8 @@ Do not claim completeness from mock tests alone.
 - [x] Before/after captures — accepted insta snapshot `...display_policy_tests__compact_preview_and_full_presentations_snapshot.snap` in repo.
 - [x] Post-merge hygiene (2026-09-22, Windows 11 x64, rustc 1.98.1): `cargo fmt --check` passes; clippy clean for all workbench files (one deny-level `redundant_clone` fixed); targeted `display_policy` 14/14 re-passed after fixes (commit `6086618`, merge `9e0f598`). Follow-up broadening: `codex-config` 344/344 pass; `history_cell` 224/227 with the same 3 pre-existing theme/width snapshot fails as baseline (`recap_history_cell_preserves_line_breaks…`, two `session_header…halfwidth…` — unrelated to MCP, match Track A's baseline triage). Pre-existing `layout.rs` late-init (clippy-1.98-only; upstream CI pins 1.95.0) left untouched.
 - CI: `workbench-ci` vscode/secret/npm jobs green on both OSes (run 35702742769); TUI job red on a workflow bug (wrong cwd, no root Cargo.toml) — fixed, re-run 35702978564 pending.
-- [x] CI fully green on `workbench/main` (run 35716951619, 43m42s, 2026-09-22): TUI fmt/clippy/targeted-nextest on Ubuntu + Windows, vscode typecheck/lint/test on both OSes, secret scan, npm pack check. First green gate run.
+- [x] CI fully green on `workbench/main`, twice (runs 35716951619 and 35841868987, ~40m each): TUI fmt/clippy/targeted-nextest on Ubuntu + Windows, vscode typecheck/lint/test on both OSes, secret scan, npm pack check.
+- [~] First release run: tag `workbench-v0.1.0+upstream.639d2478…` cut and pushed to exercise `workbench-release.yml` end to end (Windows MSVC + Linux musl packages, VSIX, guards, draft-only — no publish path exists). Run 35849096296 pending; first exercise of the guard job and both native builds in CI.
 
 ## M2 — CLI public-ready
 
