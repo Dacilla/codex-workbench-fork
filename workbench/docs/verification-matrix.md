@@ -20,6 +20,7 @@ Do not claim completeness from mock tests alone.
 - CI: `workbench-ci` vscode/secret/npm jobs green on both OSes (run 35702742769); TUI job red on a workflow bug (wrong cwd, no root Cargo.toml) — fixed, re-run 35702978564 pending.
 - [x] CI fully green on `workbench/main`, twice (runs 35716951619 and 35841868987, ~40m each): TUI fmt/clippy/targeted-nextest on Ubuntu + Windows, vscode typecheck/lint/test on both OSes, secret scan, npm pack check.
 - [~] First release run: tag `workbench-v0.1.0+upstream.639d2478…` cut and pushed to exercise `workbench-release.yml` end to end (Windows MSVC + Linux musl packages, VSIX, guards, draft-only — no publish path exists). Run 35849096296 pending; first exercise of the guard job and both native builds in CI.
+- [x] First release result (run 35849096296, FAILURE with wins): guard job passes (tag/branch/pin/naming verified working), VSIX builds, **Windows MSVC native package builds** — but Linux musl fails on `codex-bwrap` (libcap cross-compile setup missing). Fixed by mirroring upstream's own musl recipe (binutils/pkg-config/libcap-dev, Zig 0.14.0 linker, musl tools script, aws-lc jitter flag) into the workflow; also replaced the flaky installer with setup-just. Re-validating under tag v0.1.1.
 
 ## M2 — CLI public-ready
 
