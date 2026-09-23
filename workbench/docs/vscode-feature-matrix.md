@@ -143,6 +143,20 @@ live interactive click-through UNTESTED for every kind):
   trip, Extension Host rendering of the segment/QuickPick, window-reload
   mode restore vs resume echo, and any billed turn under Plan mode.
 
+## Backend write policy (official-fallback gating)
+
+- Reads always work (unknown methods error honestly). `turn/start` requires a
+  deliberate binary (`explicit-setting`, `path-workbench` discovery sources)
+  or a live-validated version in `KNOWN_COMPATIBLE_BACKEND_VERSIONS`
+  (`backend/BackendPolicy.ts`; versions added only after a live loop, never
+  from release notes). Otherwise gated: turns throw an error naming the
+  `Allow Writes Anyway (Session)` command/palette action, which sets a
+  session-only override (never persisted, cleared on reconnect). `thread/start`
+  and all reads stay ungated. Status: LIVE-FAKE (classification incl.
+  no-origin sessions staying full; gate blocks then dispatches after
+  override). UNTESTED live: gated-banner flow against a drifted official
+  backend.
+
 ## Unsupported / deferred in this slice
 
 - `thread/realtime/*` (voice), `command/exec*` PTY hosting, `fs/*` direct

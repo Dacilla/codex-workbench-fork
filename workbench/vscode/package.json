@@ -67,6 +67,10 @@
         "title": "Codex Workbench: Attach Selection as Context"
       },
       {
+        "command": "codexWorkbench.allowWritesAnyway",
+        "title": "Codex Workbench: Allow Writes Anyway (Session)"
+      },
+      {
         "command": "codexWorkbench.selectModel",
         "title": "Codex Workbench: Select Model"
       },
@@ -108,6 +112,7 @@
     "onCommand:codexWorkbench.resumeChat",
     "onCommand:codexWorkbench.reconnectBackend",
     "onCommand:codexWorkbench.showLogs",
+    "onCommand:codexWorkbench.allowWritesAnyway",
     "onCommand:codexWorkbench.selectModel",
     "onCommand:codexWorkbench.selectEffort",
     "onCommand:codexWorkbench.selectMode",
