@@ -232,6 +232,38 @@ export class SessionManager {
   }
 
   /**
+   * Fork a thread server-side (full history; paginated hydration by the
+   * caller). The fork inherits the source's effective model/effort (own pins,
+   * else session defaults) — the same inherit-and-send rule as new threads —
+   * while backend config is preserved server-side. Returns the fork's id.
+   */
+  async forkThread(threadId: string): Promise<string> {
+    const transport = this.requireTransport();
+    const result = (await transport.request("thread/fork", { threadId, excludeTurns: true })) as Record<string, unknown>;
+    const thread = (result["thread"] ?? {}) as Record<string, unknown>;
+    if (typeof thread["id"] !== "string") {
+      throw new Error("thread/fork response missing thread.id");
+    }
+    const forkId = thread["id"] as string;
+    this.threads.upsertThread({
+      threadId: forkId,
+      displayName: typeof thread["name"] === "string" ? (thread["name"] as string) : forkId,
+      workspaceKey: "",
+      model: typeof result["model"] === "string" ? (result["model"] as string) : null,
+      effort: typeof result["reasoningEffort"] === "string" ? (result["reasoningEffort"] as string) : null,
+      cwd: typeof result["cwd"] === "string" ? (result["cwd"] as string) : null,
+      status: "idle",
+      lastTurnId: null,
+      updatedAtMs: Date.now(),
+    });
+    const pins = this.threads.effectiveOverride(threadId);
+    if (pins.model !== null || pins.effort !== null) {
+      this.threads.setThreadOverride(forkId, { model: pins.model, effort: pins.effort });
+    }
+    return forkId;
+  }
+
+  /**
    * Resume metadata-only (excludeTurns) so large histories never hydrate in
    * one blob; callers page with listThreadTurns/listThreadItems.
    */

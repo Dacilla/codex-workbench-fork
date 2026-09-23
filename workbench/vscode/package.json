@@ -51,6 +51,10 @@
         "title": "Codex Workbench: Open/Resume Existing Chat"
       },
       {
+        "command": "codexWorkbench.forkThread",
+        "title": "Codex Workbench: Fork Chat Into New Tab"
+      },
+      {
         "command": "codexWorkbench.renameTab",
         "title": "Codex Workbench: Rename Tab"
       },
@@ -110,6 +114,7 @@
     "onCommand:codexWorkbench.newChat",
     "onCommand:codexWorkbench.openChatBeside",
     "onCommand:codexWorkbench.resumeChat",
+    "onCommand:codexWorkbench.forkThread",
     "onCommand:codexWorkbench.reconnectBackend",
     "onCommand:codexWorkbench.showLogs",
     "onCommand:codexWorkbench.allowWritesAnyway",
