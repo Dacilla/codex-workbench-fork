@@ -83,6 +83,7 @@ function recordParams(recordPath: string | null, id: unknown, params: Record<str
 let threadCounter = 0;
 let turnCounter = 0;
 const threads = new Map<string, { id: string; preview: string }>();
+const archivedThreads = new Set<string>();
 const turns: Array<{ id: string; threadId: string; text: string }> = [];
 
 function platformInfo(): { platformFamily: string; platformOs: string } {
@@ -191,14 +192,47 @@ function handleRequest(id: unknown, method: string, params: Record<string, unkno
       break;
     }
     case "thread/list": {
+      const onlyArchived = params["archived"] === true;
+      const visible = [...threads.values()].filter((thread) => archivedThreads.has(thread.id) === onlyArchived);
       send({
         id,
         result: {
-          data: [...threads.values()].map((thread) => ({ id: thread.id, preview: thread.preview, historyMode: "paginated", status: { type: "notLoaded" } })),
+          data: visible.map((thread) => ({ id: thread.id, preview: thread.preview, historyMode: "paginated", status: { type: "notLoaded" } })),
           nextCursor: null,
           backwardsCursor: null,
         },
       });
+      break;
+    }
+    case "thread/archive": {
+      const threadId = String(params["threadId"] ?? "");
+      if (!threads.has(threadId)) {
+        send({ id, error: { code: -32000, message: `unknown thread ${threadId}` } });
+        break;
+      }
+      archivedThreads.add(threadId);
+      send({ id, result: {} });
+      break;
+    }
+    case "thread/unarchive": {
+      const threadId = String(params["threadId"] ?? "");
+      if (!threads.has(threadId)) {
+        send({ id, error: { code: -32000, message: `unknown thread ${threadId}` } });
+        break;
+      }
+      archivedThreads.delete(threadId);
+      send({ id, result: {} });
+      break;
+    }
+    case "thread/delete": {
+      const threadId = String(params["threadId"] ?? "");
+      if (!threads.has(threadId)) {
+        send({ id, error: { code: -32000, message: `unknown thread ${threadId}` } });
+        break;
+      }
+      threads.delete(threadId);
+      archivedThreads.delete(threadId);
+      send({ id, result: {} });
       break;
     }
     case "thread/turns/list": {
