@@ -118,7 +118,7 @@ parity counts where noted.
 | Thread search | Find threads by query | **missing-backed** | `thread/search` (method confirmed in protocol enum; `ThreadSearchResult.ts`, `ThreadSearchSortKey.ts`) | S/M (needs search UI) |
 | Archive / unarchive | Shelve a session out of the active list | **missing-backed** | `ThreadArchiveParams.ts`, `ThreadUnarchiveParams.ts` (+ `ThreadArchivedNotification.ts`, `ThreadUnarchivedNotification.ts`) | S |
 | Delete thread | Permanently remove a session | **missing-backed** | `ThreadDeleteParams.ts` (+ `ThreadDeletedNotification.ts`) | S (confirm UX guard) |
-| Fork thread | Branch a session from a point | **missing-backed** | `ThreadForkParams.ts`, `ThreadForkResponse.ts` | S |
+| Fork thread | Branch a session from a point | **have** — `forkThread` command forks the focused tab's thread into a new beside-tab with pins carried (2026-09-23) | `ThreadForkParams.ts`, `ThreadForkResponse.ts` | — |
 | Compact thread | Summarize to survive context limits | **missing-backed** | `ThreadCompactStartParams.ts`, `ThreadCompactStartResponse.ts` (+ `ContextCompactedNotification.ts`) | S/M (progress UX) |
 | Revert thread | Roll a thread back to an earlier state | **missing-backed** | `ThreadRevertParams.ts` (+ `ThreadRevertedNotification.ts`) | M (destructive; needs confirm UX) |
 | TUI `/archive`, `/delete`, `/fork`, `/compact`, `/recap`, `/rename` | Same six, CLI-side | **missing-backed** except rename (**have** via `thread/name/set`) | as above; recap GUESS (no method confirmed — likely local summarize or compact variant) | S–M each |

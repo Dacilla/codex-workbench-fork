@@ -103,6 +103,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("codexWorkbench.newChat", () => void createChatPanel()),
     vscode.commands.registerCommand("codexWorkbench.openChatBeside", () => void createChatPanel(vscode.ViewColumn.Beside)),
     vscode.commands.registerCommand("codexWorkbench.resumeChat", () => void pickAndResume()),
+    vscode.commands.registerCommand("codexWorkbench.forkThread", () => void forkActiveThread()),
     vscode.commands.registerCommand("codexWorkbench.renameTab", () => void renameActiveTab()),
     vscode.commands.registerCommand("codexWorkbench.reconnectBackend", () => void reconnect()),
     vscode.commands.registerCommand("codexWorkbench.showLogs", () => outputChannel?.show()),
@@ -422,6 +423,36 @@ async function pickAndResume(): Promise<void> {
     postModelState(newest);
   } catch (error) {
     void newest.panel.webview.postMessage({ type: "ext/error", message: `thread/resume failed: ${error instanceof Error ? error.message : String(error)}` });
+  }
+  persistBindings();
+}
+
+async function forkActiveThread(): Promise<void> {
+  if (!(await ensureConnected(false)) || manager === null) {
+    return;
+  }
+  const source = activePanel();
+  if (source === undefined || source.threadId === null) {
+    void vscode.window.showErrorMessage("Codex Workbench: focus a chat tab with a live thread to fork it.");
+    return;
+  }
+  const sourceId = source.threadId;
+  const newest = await createChatPanel(vscode.ViewColumn.Beside, { startThread: false });
+  if (newest === null || manager === null) {
+    return;
+  }
+  try {
+    const forkId = await manager.forkThread(sourceId);
+    const sourceName = manager.threads.getThread(sourceId)?.displayName ?? sourceId;
+    newest.threadId = forkId;
+    manager.threads.bindPanel(newest.panelId, forkId, `${sourceName} (fork)`, workspaceKey());
+    subscribePanel(newest);
+    newest.panel.webview.html = renderHtml(newest.panel.webview, newest.panelId, forkId, "");
+    await hydratePanel(newest);
+    postModelState(newest);
+  } catch (error) {
+    void newest.panel.webview.postMessage({ type: "ext/error", message: `thread/fork failed: ${error instanceof Error ? error.message : String(error)}` });
+    return;
   }
   persistBindings();
 }

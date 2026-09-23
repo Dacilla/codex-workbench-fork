@@ -137,6 +137,33 @@ function handleRequest(id: unknown, method: string, params: Record<string, unkno
       });
       break;
     }
+    case "thread/fork": {
+      const sourceId = String(params["threadId"] ?? "");
+      if (!threads.has(sourceId)) {
+        send({ id, error: { code: -32000, message: `unknown thread ${sourceId}` } });
+        break;
+      }
+      threadCounter += 1;
+      const threadId = `thr-fake-${threadCounter}`;
+      threads.set(threadId, { id: threadId, preview: "" });
+      send({
+        id,
+        result: {
+          thread: { id: threadId, preview: "", historyMode: "paginated", status: { type: "idle" }, model: "fake-model", modelProvider: "fake" },
+          model: "fake-model",
+          modelProvider: "fake",
+          serviceTier: null,
+          disabledPluginIds: [],
+          cwd: "/tmp",
+          instructionSources: [],
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          sandbox: "read-only",
+          reasoningEffort: null,
+        },
+      });
+      break;
+    }
     case "thread/resume": {
       const threadId = String(params["threadId"] ?? "");
       if (!threads.has(threadId)) {
