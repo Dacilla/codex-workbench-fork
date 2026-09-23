@@ -264,6 +264,27 @@ export class SessionManager {
   }
 
   /**
+   * Archive / unarchive / delete a thread. Registry records drop only after
+   * the backend confirms; panel disposal is the caller's job (it owns the
+   * VS Code tabs). Delete is irreversible — callers must confirm explicitly.
+   */
+  async archiveThread(threadId: string): Promise<void> {
+    await this.requireTransport().request("thread/archive", { threadId });
+    this.threads.removeThread(threadId);
+  }
+
+  async unarchiveThread(threadId: string): Promise<Record<string, unknown>> {
+    const transport = this.requireTransport();
+    const result = (await transport.request("thread/unarchive", { threadId })) as Record<string, unknown>;
+    return result;
+  }
+
+  async deleteThread(threadId: string): Promise<void> {
+    await this.requireTransport().request("thread/delete", { threadId });
+    this.threads.removeThread(threadId);
+  }
+
+  /**
    * Resume metadata-only (excludeTurns) so large histories never hydrate in
    * one blob; callers page with listThreadTurns/listThreadItems.
    */

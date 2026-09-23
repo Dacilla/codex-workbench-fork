@@ -55,6 +55,18 @@
         "title": "Codex Workbench: Fork Chat Into New Tab"
       },
       {
+        "command": "codexWorkbench.archiveChat",
+        "title": "Codex Workbench: Archive Chat"
+      },
+      {
+        "command": "codexWorkbench.unarchiveChat",
+        "title": "Codex Workbench: Unarchive Chat Into New Tab"
+      },
+      {
+        "command": "codexWorkbench.deleteChat",
+        "title": "Codex Workbench: Delete Chat…"
+      },
+      {
         "command": "codexWorkbench.renameTab",
         "title": "Codex Workbench: Rename Tab"
       },
@@ -115,6 +127,9 @@
     "onCommand:codexWorkbench.openChatBeside",
     "onCommand:codexWorkbench.resumeChat",
     "onCommand:codexWorkbench.forkThread",
+    "onCommand:codexWorkbench.archiveChat",
+    "onCommand:codexWorkbench.unarchiveChat",
+    "onCommand:codexWorkbench.deleteChat",
     "onCommand:codexWorkbench.reconnectBackend",
     "onCommand:codexWorkbench.showLogs",
     "onCommand:codexWorkbench.allowWritesAnyway",

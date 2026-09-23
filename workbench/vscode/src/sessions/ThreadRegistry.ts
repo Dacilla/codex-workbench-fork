@@ -249,6 +249,28 @@ export class ThreadRegistry {
     return threadId;
   }
 
+  /**
+   * Archive/delete path: drop the thread record, its pins/mode, and every
+   * panel binding referencing it. Call only after the backend confirms.
+   */
+  removeThread(threadId: string): boolean {
+    const existed = this.threads.delete(threadId);
+    this.overrides.delete(threadId);
+    this.modes.delete(threadId);
+    let unbound = false;
+    for (const [panelId, bound] of [...this.panelToThread]) {
+      if (bound === threadId) {
+        this.panelToThread.delete(panelId);
+        unbound = true;
+      }
+    }
+    if (unbound) {
+      this.bindings = this.bindings.filter((binding) => binding.threadId !== threadId);
+      this.storage.writeBindings(this.bindings);
+    }
+    return existed || unbound;
+  }
+
   threadForPanel(panelId: string): string | null {
     return this.panelToThread.get(panelId) ?? null;
   }

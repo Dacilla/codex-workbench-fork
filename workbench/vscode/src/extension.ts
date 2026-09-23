@@ -104,6 +104,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("codexWorkbench.openChatBeside", () => void createChatPanel(vscode.ViewColumn.Beside)),
     vscode.commands.registerCommand("codexWorkbench.resumeChat", () => void pickAndResume()),
     vscode.commands.registerCommand("codexWorkbench.forkThread", () => void forkActiveThread()),
+    vscode.commands.registerCommand("codexWorkbench.archiveChat", () => void archiveActiveChat()),
+    vscode.commands.registerCommand("codexWorkbench.unarchiveChat", () => void unarchiveChat()),
+    vscode.commands.registerCommand("codexWorkbench.deleteChat", () => void deleteActiveChat()),
     vscode.commands.registerCommand("codexWorkbench.renameTab", () => void renameActiveTab()),
     vscode.commands.registerCommand("codexWorkbench.reconnectBackend", () => void reconnect()),
     vscode.commands.registerCommand("codexWorkbench.showLogs", () => outputChannel?.show()),
@@ -407,16 +410,126 @@ async function pickAndResume(): Promise<void> {
     return;
   }
   const newest = await createChatPanel(vscode.ViewColumn.Active, { startThread: false });
-  // Attach the resumed thread to the fresh panel. No backend thread leaks:
-  // createChatPanel skips thread/start for resume flows.
   if (newest === null || manager === null) {
     return;
   }
-  const threadId = pickedId;
+  await openThreadInNewTab(newest, pickedId, picked.label);
+  persistBindings();
+}
+
+async function archiveActiveChat(): Promise<void> {
+  if (!(await ensureConnected(false)) || manager === null) {
+    return;
+  }
+  const source = activePanel();
+  if (source === undefined || source.threadId === null) {
+    return;
+  }
+  const threadId = source.threadId;
+  const name = manager.threads.getThread(threadId)?.displayName ?? threadId;
+  const confirm = await vscode.window.showWarningMessage(
+    `Codex Workbench: archive "${name}"? It leaves the backend history intact and can be unarchived later.`,
+    { modal: true },
+    "Archive",
+  );
+  if (confirm !== "Archive" || manager === null) {
+    return;
+  }
+  try {
+    await manager.archiveThread(threadId);
+  } catch (error) {
+    void vscode.window.showErrorMessage(`Codex Workbench: thread/archive failed: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  for (const panelId of manager.threads.panelsForThread(threadId)) {
+    livePanels.get(panelId)?.panel.dispose();
+  }
+  void vscode.window.showInformationMessage(`Codex Workbench: archived "${name}".`);
+  persistBindings();
+}
+
+async function unarchiveChat(): Promise<void> {
+  if (!(await ensureConnected(false)) || manager === null) {
+    return;
+  }
+  let threads: Array<Record<string, unknown>>;
+  try {
+    const result = (await manager.listThreads({ limit: 50, archived: true })) as Record<string, unknown>;
+    threads = Array.isArray(result["data"]) ? (result["data"] as Array<Record<string, unknown>>) : [];
+  } catch (error) {
+    void vscode.window.showErrorMessage(`Codex Workbench: thread/list failed: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  if (threads.length === 0) {
+    void vscode.window.showInformationMessage("Codex Workbench: no archived threads.");
+    return;
+  }
+  const picked = await vscode.window.showQuickPick(
+    threads.map((thread) => ({ label: String(thread["name"] ?? thread["preview"] ?? thread["id"]), description: String(thread["id"]), thread })),
+    { placeHolder: "Unarchive a Codex thread into a new editor tab" },
+  );
+  if (picked === undefined || manager === null) {
+    return;
+  }
+  const threadId = String((picked.thread as Record<string, unknown>)["id"]);
+  try {
+    await manager.unarchiveThread(threadId);
+  } catch (error) {
+    void vscode.window.showErrorMessage(`Codex Workbench: thread/unarchive failed: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  const newest = await createChatPanel(vscode.ViewColumn.Active, { startThread: false });
+  if (newest === null || manager === null) {
+    return;
+  }
+  await openThreadInNewTab(newest, threadId, picked.label);
+  persistBindings();
+}
+
+async function deleteActiveChat(): Promise<void> {
+  if (!(await ensureConnected(false)) || manager === null) {
+    return;
+  }
+  const source = activePanel();
+  if (source === undefined || source.threadId === null) {
+    return;
+  }
+  const threadId = source.threadId;
+  const name = manager.threads.getThread(threadId)?.displayName ?? threadId;
+  // Irreversible: require typing the thread name, not just a button click.
+  const typed = await vscode.window.showInputBox({
+    prompt: `Codex Workbench: type "${name}" to permanently DELETE this thread and its history`,
+    placeHolder: name,
+  });
+  if (typed !== name || manager === null) {
+    return;
+  }
+  try {
+    await manager.deleteThread(threadId);
+  } catch (error) {
+    void vscode.window.showErrorMessage(`Codex Workbench: thread/delete failed: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  for (const panelId of manager.threads.panelsForThread(threadId)) {
+    livePanels.get(panelId)?.panel.dispose();
+  }
+  void vscode.window.showInformationMessage(`Codex Workbench: deleted "${name}".`);
+  persistBindings();
+}
+
+/** Bind an already-resumed thread id to a fresh bare panel and hydrate it. */
+async function openThreadInNewTab(
+  newest: PanelContext,
+  threadId: string,
+  label: string,
+): Promise<void> {
+  if (manager === null) {
+    return;
+  }
   try {
     await manager.resumeThread(threadId);
     newest.threadId = threadId;
-    manager.threads.bindPanel(newest.panelId, threadId, picked.label, workspaceKey());
+    manager.threads.bindPanel(newest.panelId, threadId, label, workspaceKey());
     subscribePanel(newest);
     newest.panel.webview.html = renderHtml(newest.panel.webview, newest.panelId, threadId, "");
     await hydratePanel(newest);
@@ -424,7 +537,6 @@ async function pickAndResume(): Promise<void> {
   } catch (error) {
     void newest.panel.webview.postMessage({ type: "ext/error", message: `thread/resume failed: ${error instanceof Error ? error.message : String(error)}` });
   }
-  persistBindings();
 }
 
 async function forkActiveThread(): Promise<void> {

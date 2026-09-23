@@ -116,8 +116,8 @@ parity counts where noted.
 | Codex `chatSessions` provider (`openai-codex`) + `newSession` menu | Native session switcher integration | **needs-research** — proposed API surface; adoption cost unknown | GUESS (VS Code API, not App Server) | M; research API stability first |
 | TUI `/resume` ("resume a saved chat") | Same, CLI-side | **have** | `ThreadResumeParams.ts` | — |
 | Thread search | Find threads by query | **missing-backed** | `thread/search` (method confirmed in protocol enum; `ThreadSearchResult.ts`, `ThreadSearchSortKey.ts`) | S/M (needs search UI) |
-| Archive / unarchive | Shelve a session out of the active list | **missing-backed** | `ThreadArchiveParams.ts`, `ThreadUnarchiveParams.ts` (+ `ThreadArchivedNotification.ts`, `ThreadUnarchivedNotification.ts`) | S |
-| Delete thread | Permanently remove a session | **missing-backed** | `ThreadDeleteParams.ts` (+ `ThreadDeletedNotification.ts`) | S (confirm UX guard) |
+| Archive / unarchive | Shelve a session out of the active list | **have** — `archiveChat` (modal confirm, closes bound tabs), `unarchiveChat` (archived-list QuickPick into new tab) | `ThreadArchiveParams.ts`, `ThreadUnarchiveParams.ts` (+ `ThreadArchivedNotification.ts`, `ThreadUnarchivedNotification.ts`) | — |
+| Delete thread | Permanently remove a session | **have** — `deleteChat` with typed-name confirm, backend delete + panel disposal | `ThreadDeleteParams.ts` (+ `ThreadDeletedNotification.ts`) | — |
 | Fork thread | Branch a session from a point | **have** — `forkThread` command forks the focused tab's thread into a new beside-tab with pins carried (2026-09-23) | `ThreadForkParams.ts`, `ThreadForkResponse.ts` | — |
 | Compact thread | Summarize to survive context limits | **missing-backed** | `ThreadCompactStartParams.ts`, `ThreadCompactStartResponse.ts` (+ `ContextCompactedNotification.ts`) | S/M (progress UX) |
 | Revert thread | Roll a thread back to an earlier state | **missing-backed** | `ThreadRevertParams.ts` (+ `ThreadRevertedNotification.ts`) | M (destructive; needs confirm UX) |
